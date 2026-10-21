@@ -1,13 +1,15 @@
-# Daily Sim — golf simulator (fan-made)
+# Tour Sim — golf simulator (fan-made)
 
-A browser golf simulator with **no characters**, just the ball, tee, mat, course, tracer and a launch monitor. **[Play it](https://jamesgregory5-svg.github.io/daily-sim/)**.
+A browser golf simulator with **no characters**, just the ball, tee, mat, course, tracer and a launch monitor. **[Play it](https://jamesgregory5-svg.github.io/tour-sim/)**.
 
 The whole game is one self-contained `index.html`, about 1.7 MB, that makes **no network requests**. You can also download it and open it straight from disk (`file://`), which is handy where github.io is blocked. It works on phone and desktop with touch, mouse or keyboard.
 
 > Fan-made; layouts approximate; not affiliated with any club.
 
 ## Modes
-- **Play a course.** Choose from the top 25 of Golf Digest's *America's 100 Greatest Courses (2025-26)*, plus **Lookaway Golf Club** (Buckingham, PA), which is pinned as the home course. You can play the Front 9, the Back 9 or all 18, from your choice of tees. Rounds save automatically and can be resumed.
+- **Play a course.** Choose from the top 25 of Golf Digest's *America's 100 Greatest Courses (2025-26)*, plus **Lookaway Golf Club** (Buckingham, PA), which is pinned as the home course. You can play the Front 9, the Back 9 or all 18, from any of the course's real tee sets (tee markers move, and records are kept per course and per tee). Rounds save automatically and can be resumed.
+- **Pass-and-play.** 1-4 named players share one device in stroke play. Honors decide who tees off, the player farthest from the hole plays next, and a "Player up" banner shows whose turn it is. Each player has their own ball and name tag. The scorecard and leaderboard cover every player, and a results screen appears at the end. Records are saved under each player's name.
+- **Replays.** After a great shot (a hole-out, an eagle or better, inside 6 ft from 100+ yds, a made putt over 30 ft, or a top-5 drive) you're offered a cinematic replay with slow motion near the hole. Tap to skip. **Replay last shot** is always available.
 - **Driving range.** Target flags from 50 to 300 yds. It shows dispersion by club, saved **My Bag** gapping and session stats.
 - **Closest to the Pin.** A daily seeded famous par 3 with 5 balls.
 - **Long Drive.** A daily seeded grid and wind, with 6 balls and the driver only.
@@ -51,7 +53,7 @@ Hole routing, greens, fairways, bunkers, tees, water and woods come from **OpenS
 | 10 | Fishers Island Club | Fishers Island, NY | 70 | 6597 (Black) | BlueGolf / Stymie scorecard |
 | 11 | Chicago Golf Club | Wheaton, IL | 70 | 6950 (Championship) | Wikipedia (Chicago GC course table) |
 | 12 | Seminole Golf Club | Juno Beach, FL | 72 | 7259 (Gold) | BlueGolf / Stymie scorecard |
-| 13 | Winged Foot Golf Club (West) | Mamaroneck, NY | 70 | 7477 (U.S. Open) | Wikipedia (Winged Foot 2020 U.S. Open card) |
+| 13 | Winged Foot Golf Club (West) | Mamaroneck, NY | 70 (member tees 72) | 7477 (U.S. Open); Blue 7426, Black 6937, White 6522 | Wikipedia (2020 U.S. Open card); GolfPass / Zomma member scorecard |
 | 14 | Friar's Head | Baiting Hollow, NY | 71 | 7071 (Back) | golfcoursebrowser / 18Birdies scorecard |
 | 15 | Crystal Downs Country Club | Frankfort, MI | 70 | 6509 (Blue) | GolfPass / Zomma scorecard (Blue) |
 | 16 | Los Angeles Country Club (North) | Los Angeles, CA | 70 | 7423 (U.S. Open) | Wikipedia (2023 U.S. Open course layout) |
@@ -69,4 +71,5 @@ Hole routing, greens, fairways, bunkers, tees, water and woods come from **OpenS
 - **The Country Club:** the US Open composite routing (holes 10-12) is stitched from OSM Main-course holes.
 - **OSM par differences:** a few OSM hole lines carry a different par than the scorecard. The scorecard is always used.
 - **Synthesized features:** where OSM lacks a green or fairway (for example Prairie Dunes 6), a plausible one is synthesized and flagged.
+- **Tee sets:** only tee sets with a published scorecard are offered; several courses currently have one tee set.
 - **Tee placement:** tees are placed on land so the tee-to-pin distance matches the scorecard yardage.
