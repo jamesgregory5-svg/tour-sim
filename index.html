@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.5';
+const VERSION='v1.6';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -580,7 +580,12 @@ function buildHole0(course,geo,hi,teeIdx,opts){
   const blur=(code,rad)=>{const m=new Float32Array(W*H);for(let i=0;i<m.length;i++){const s=SU[i];m[i]=(typeof code==='function'?code(s):s===code)?1:0}
     const t=new Float32Array(W*H);for(let pass=0;pass<2;pass++){for(let j=0;j<H;j++){let acc=0;for(let i=-rad;i<W+rad;i++){if(i+rad<W)acc+=m[j*W+i+rad];if(i-rad-1>=0)acc-=m[j*W+i-rad-1];if(i>=0&&i<W)t[j*W+i]=acc/(2*rad+1)}}
       for(let i=0;i<W;i++){let acc=0;for(let j=-rad;j<H+rad;j++){if(j+rad<H)acc+=t[(j+rad)*W+i];if(j-rad-1>=0)acc-=t[(j-rad-1)*W+i];if(j>=0&&j<H)m[j*W+i]=acc/(2*rad+1)}}}return m};
-  const mG=blur(s=>s===5||s===4,3),mS=blur(6,2),mW=blur(7,2),mT=blur(3,2);
+  // smooth sand coverage from the real polygons (4 px/yd, area-averaged) instead of the 1-yd raster, so bunker lips have no stair steps
+  const mS=(()=>{const K=4,cv=document.createElement('canvas');cv.width=W*K;cv.height=H*K;const q=cv.getContext('2d');q.fillStyle='#fff';q.scale(K,K);
+    for(const P of(F.bk||[])){q.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?q.lineTo(x,y):q.moveTo(x,y)});q.closePath();q.fill()}
+    const d=q.getImageData(0,0,W*K,H*K).data,m=new Float32Array(W*H);for(let j=0;j<H;j++)for(let i=0;i<W;i++){let a=0;const r0=(H-1-j)*K;for(let v=0;v<K;v++)for(let u=0;u<K;u++)a+=d[((r0+v)*W*K+i*K+u)*4];m[j*W+i]=a/(K*K*255)}
+    const t=new Float32Array(W*H);for(let j=0;j<H;j++)for(let i=0;i<W;i++){let a=0,n=0;for(let v=-1;v<=1;v++)for(let u=-1;u<=1;u++){const ii=i+u,jj=j+v;if(ii<0||jj<0||ii>=W||jj>=H)continue;a+=m[jj*W+ii]*(u||v?1:2);n+=u||v?1:2}t[j*W+i]=a/n}return t})();
+  const mG=blur(s=>s===5||s===4,3),mW=blur(7,2),mT=blur(3,2);
   const und=st.und*(par===3?.8:1)*(DEM_OK?.55:1);const gBase=fbm2(gcx,gcy,seedN)*und+.35+dGC;
   const cellM=(m,i,j)=>{i=clamp(i,0,W-1);j=clamp(j,0,H-1);return m[j*W+i]};
   // famous deep pot bunkers (real OSM bunker polygons, deepened): Pine Valley 10 "Devil's Asshole", short-right of the green
@@ -662,7 +667,7 @@ function paintHole(H,PX){
   const b=document.createElement('canvas');b.width=W;b.height=Hh;const bg=b.getContext('2d'),im=bg.createImageData(W,Hh);
   const hex=c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];
   const C=[hex(st.deep),hex(st.rough),hex(st.fw),hex(st.fw),hex('#5a923a'),hex('#62a040'),hex(st.sand),hex('#2c5a63'),hex(st.deep),hex(st.waste)];
-  C[0]=hex(st.deep).map(v=>v*.85|0);
+  C[0]=hex(st.deep).map(v=>v*.85|0);if((H.F.bk||[]).length)C[6]=hex(st.rough);// bunkers are painted from their polygons (no 1-yd stair halo)
   for(let j=0;j<Hh;j++)for(let i=0;i<W;i++){const s=S[j*W+i],c=C[s],o=((Hh-1-j)*W+i)*4;
     let v=1;if(s===1||s===8||s===0){v=1+.07*vnoise(i*.09,j*.09)+.05*vnoise(i*.31+9,j*.31)}
     im.data[o]=c[0]*v;im.data[o+1]=c[1]*v;im.data[o+2]=c[2]*v;im.data[o+3]=255}
@@ -708,7 +713,7 @@ function paintHole(H,PX){
     if(s===9){g.fillStyle=R()<.5?'rgba(80,90,40,.7)':'rgba(140,120,80,.5)';g.beginPath();g.arc(x*PX,y*PX,PX*R.range(.3,.9),0,TAU);g.fill()}
     else if(s===8||s===0){g.fillStyle=R()<.5?'rgba(40,60,25,.35)':'rgba(150,150,90,.25)';g.beginPath();g.arc(x*PX,y*PX,PX*R.range(.4,1.2),0,TAU);g.fill()}}
   // tree shadows (sun direction)
-  const sx=-SUN_FRAME[0]/SUN_FRAME[2],sy=-SUN_FRAME[1]/SUN_FRAME[2];
+  const sz=Math.max(SUN_FRAME[2],.24),sx=-SUN_FRAME[0]/sz,sy=-SUN_FRAME[1]/sz;
   for(const t of H.trees){const ch=t.h*(t.cb+(1-t.cb)*.5),rx=t.w*.5,ox=sx*ch,oy=sy*ch;const cx=(t.x+ox-X0)*PX,cy=(Y1-(t.y+oy))*PX;
     const r=Math.max(rx,.6)*PX;const gr=g.createRadialGradient(cx,cy,r*.2,cx,cy,r*1.15);gr.addColorStop(0,'rgba(8,22,4,.42)');gr.addColorStop(1,'rgba(8,22,4,0)');g.fillStyle=gr;
     g.beginPath();g.ellipse(cx,cy,r*1.15,r*1.15*(t.sp===0||t.sp===7?1.2:1),Math.atan2(-oy,ox),0,TAU);g.fill();
@@ -793,7 +798,7 @@ void main(){
   if(fes>0.){vec2 wq=vP.xy*vec2(1.,1.)+vec2(sin(uTime*.7+vP.y*.3)*.15,0.);float st=texture(uNoise,wq*vec2(2.2,.55)).r*.6+texture(uNoise,wq*vec2(.9,3.1)).g*.4;
     float bl=texture(uNoise,wq*vec2(7.3,1.6)+.21).b;float wb=1.-smoothstep(.2,.55,fp*7.3);st=mix(st,st*.55+bl*.7,wb);vec3 fc=mix(vec3(.46,.43,.27),vec3(.80,.72,.50),smoothstep(.32,.78,st))*mix(.8,1.1,nz.b)*mix(1.,.72+.5*bl,wb*.8);c=mix(c,pow(fc,vec3(2.2)),fes*.85);}
   float slope=length(N.xy);vec3 col=c*(amb*.58+uSunCol*df*1.42)*(1.-clamp(slope*2.4,0.,.32)*grass);
-  col*=1.-.28*sgB*(1.-m.b*.6);col*=mix(1.,.9+.2*nz5.r,m.b*near);
+  col*=1.-.32*sgB*(1.-m.b*.6);{float face=smoothstep(.5,.6,m.b)*(1.-smoothstep(.62,.95,m.b));vec3 Lg=normalize(vec3(N.xy*6.,N.z));col*=1.-.24*face*clamp(.6-dot(Lg,uSun),0.,1.)*1.6;}col*=mix(1.,.9+.2*nz5.r,m.b*near);
   // water
   float w=smoothstep(.38,.62,m.r+(nz2.r-.5)*.1);
   if(uOuter>0.&&outd>0.)w=step(.5,m.r);
@@ -927,11 +932,11 @@ function glSetHole(R,H,PX){
 const LIGHT={sun:SUN_FRAME,sunCol:[1.0,.88,.70],skyTop:[.26,.47,.80],skyHor:[.68,.77,.88],fog:[.70,.78,.86],far:[.17,.27,.14]};
 function glDraw(R,cam,S){
   const gl=R.gl,cv=R.canvas,H=R.hole.H;gl.viewport(0,0,cv.width,cv.height);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);
-  gl.clearColor(.7,.75,.8,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.clearColor(LIGHT.skyHor[0],LIGHT.skyHor[1],LIGHT.skyHor[2],1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   const asp=cv.width/cv.height,fov=cam.fov||.85;const Pm=M4.persp(fov,asp,.08,7000),V=M4.look(cam.eye,cam.at,[0,0,1]),VP=M4.mul(Pm,V);
   const t=S.time;
   const common=(p)=>{const u=p.u;gl.useProgram(p.p);if(u.uVP)gl.uniformMatrix4fv(u.uVP,false,VP);gl.uniform3fv(u.uSun,LIGHT.sun);gl.uniform3fv(u.uSunCol,LIGHT.sunCol);gl.uniform3fv(u.uSkyTop,LIGHT.skyTop);gl.uniform3fv(u.uSkyHor,LIGHT.skyHor);gl.uniform3fv(u.uFogCol,LIGHT.fog);
-    gl.uniform1f(u.uFogK,(cam.fogK||1.1e-6)*.45);gl.uniform3fv(u.uEye,cam.eye);if(u.uTime)gl.uniform1f(u.uTime,t)};
+    gl.uniform1f(u.uFogK,(cam.fogK||1.1e-6)*.45*(LIGHT.fogMul||1));gl.uniform3fv(u.uEye,cam.eye);if(u.uTime)gl.uniform1f(u.uTime,t)};
   // sky
   {const p=R.pSky;common(p);const f=[cam.at[0]-cam.eye[0],cam.at[1]-cam.eye[1],cam.at[2]-cam.eye[2]];let l=Math.hypot(...f);f[0]/=l;f[1]/=l;f[2]/=l;
     let r=[f[1],-f[0],0];l=Math.hypot(...r)||1;r=[r[0]/l,r[1]/l,0];const u=[r[1]*f[2]-r[2]*f[1],r[2]*f[0]-r[0]*f[2],r[0]*f[1]-r[1]*f[0]];
@@ -1321,7 +1326,7 @@ function setTraj(t){G.traj=G.traj===t?0:t;for(const b of $('shape').querySelecto
 function updPutt(){const ft=(G.sw&&G.sw.ft)||0;if(!$('pFt'))return;$('pFt').textContent=ft.toFixed(ft<10?1:0)+' ft';$('pBar').style.width=clamp(ft/G.puttMax*100,0,100)+'%'}
 
 /* ================= round flow ================= */
-function startRound(cid,tee,start,n,players,gimme){const c=CID[cid];const pl=(players&&players.length?players:[{name:ownerName(),owner:1}]).map(p=>({name:String(p.name).slice(0,16)||'Player',owner:!!p.owner,sc:[],pt:[],fir:[],gir:[],dr:[],pen:[]}));G.round={id:cid+':'+Date.now(),cid,tee,start,n,i:0,gimme:gimme||0,sc:[],pt:[],fir:[],gir:[],dr:[],pen:[],d:todayKey(),players:pl};G.mode='round';loadRoundHole(null)}
+function startRound(cid,tee,start,n,players,gimme,tod){const c=CID[cid];const pl=(players&&players.length?players:[{name:ownerName(),owner:1}]).map(p=>({name:String(p.name).slice(0,16)||'Player',owner:!!p.owner,sc:[],pt:[],fir:[],gir:[],dr:[],pen:[]}));G.round={id:cid+':'+Date.now(),cid,tee,start,n,i:0,gimme:gimme||0,tod:tod||todKey(),sc:[],pt:[],fir:[],gir:[],dr:[],pen:[],d:todayKey(),players:pl};G.mode='round';loadRoundHole(null)}
 function loadRoundHole(rs){const r=G.round,c=CID[r.cid],idx=r.start+r.i;hideScreens();$('hud').classList.add('on');$('modeBar').classList.add('hide');$('rangeP').classList.remove('on');clearLabels();
   G.allowed=null;G.target=null;G.extraBalls=null;G.cupOn=true;G.afterRest=null;
   const H=buildHole(c,GEO[c.id],idx,r.tee,{cupSeed:r.id});setHole(H);G.wind=windFor(r.id+'#'+idx);carryReset();
@@ -1383,20 +1388,21 @@ function showSelect(){const R=recLoad();const home=COURSES.filter(c=>c.home),top
   <div class="cards">${home.map(c=>courseCard(c,R)).join('')}</div><div class="sec">Golf Digest · America's 100 Greatest (2025-26) · Top 25</div><div class="cards">${top.map(c=>courseCard(c,R)).join('')}</div>
   <div class="disc">Fan-made; layouts approximate; not affiliated with any club.</div></div>`);
   $('sb').onclick=showMenu;s.querySelectorAll('.cc').forEach(b=>b.onclick=()=>showSetup(b.dataset.id))}
-function showSetup(cid){const c=CID[cid];if(!c||!c.tees||!c.tees.length){showSelect();return}let tee=0,part=2,np=1,gm=+(store('ts.gimme')||0);const names=[ownerName(),...((store('ts.players')||[]).slice(-3).reverse())];while(names.length<4)names.push('Player '+(names.length+1));const tot=t=>c.tees[t].y.reduce((a,b)=>a+b,0);
+function showSetup(cid){const c=CID[cid];if(!c||!c.tees||!c.tees.length){showSelect();return}let tee=0,part=2,np=1,gm=+(store('ts.gimme')||0),tod=todKey();const names=[ownerName(),...((store('ts.players')||[]).slice(-3).reverse())];while(names.length<4)names.push('Player '+(names.length+1));const tot=t=>c.tees[t].y.reduce((a,b)=>a+b,0);
   const draw=()=>{const s=show('scSetup',`<div class="pn"><div class="hdr"><button class="ib" id="ub">‹</button><h2 style="font-size:18px">${esc(c.name)}</h2></div>
    <div class="lo" style="opacity:.75;font-size:13px">${c.home?'<span class="badge" style="margin:0 6px 0 0">HOME COURSE</span>':'#'+c.rank+' · '}${esc(c.loc)}</div>
    <div class="sec">Tee box</div><div class="seg" id="tees">${c.tees.map((t,i)=>`<button data-i="${i}" class="${i===tee?'sel':''}">${esc(t.n)}<small>${tot(i).toLocaleString()} yds${t.par?' · par '+t.par.reduce((a,b)=>a+b,0):''}</small></button>`).join('')}</div>
    <div class="sec">Holes</div><div class="seg" id="parts">${['Front 9','Back 9','18 holes'].map((n,i)=>`<button data-i="${i}" class="${i===part?'sel':''}">${n}</button>`).join('')}</div>
    <div class="sec">Players · pass and play</div><div class="seg" id="np">${[1,2,3,4].map(k=>`<button data-i="${k}" class="${k===np?'sel':''}">${k===1?'Solo':k+' players'}</button>`).join('')}</div>
+   <div class="sec">Time of day</div><div class="seg" id="tod">${Object.keys(TOD).map(k=>`<button data-k="${k}" class="${k===tod?'sel':''}">${TOD[k].n}</button>`).join('')}</div>
    <div class="sec">Gimmes</div><div class="seg" id="gm">${[0,2,3].map(k=>`<button data-i="${k}" class="${k===gm?'sel':''}">${k?k+' ft':'Off'}</button>`).join('')}</div>${gm?'<div class="gnote">Gimmes on, no records. Putts inside '+gm+' ft are conceded for +1 stroke.</div>':''}
    <div class="pls">${Array.from({length:np},(_,k)=>`<label><span>${k===0?'You (profile owner)':'Player '+(k+1)}</span><input data-k="${k}" maxlength="16" value="${esc(names[k])}"></label>`).join('')}</div>
    <div class="scr">${cardHTML(c,tee,0,18,null,null)}</div>
    ${Object.keys(c.sig||{}).length?`<div class="sec">Signature holes</div><div style="font-size:13px;opacity:.85">${Object.entries(c.sig).map(([h,l])=>'#'+h+' '+esc(l)).join(' · ')}</div>`:''}
    <button class="btn c" id="go" style="margin-top:14px">Tee off</button><button class="btn alt c" id="gr">My records here</button>
    <div class="disc">Fan-made; layouts approximate; not affiliated with any club.<br>Scorecard: ${esc(c.src||'')}</div></div>`);
-   s.querySelector('#tees').onclick=e=>{const b=e.target.closest('button');if(b){tee=+b.dataset.i;draw()}};s.querySelector('#parts').onclick=e=>{const b=e.target.closest('button');if(b){part=+b.dataset.i;draw()}};s.querySelector('#np').onclick=e=>{const b=e.target.closest('button');if(b){np=+b.dataset.i;draw()}};s.querySelector('#gm').onclick=e=>{const b=e.target.closest('button');if(b){gm=+b.dataset.i;store('ts.gimme',gm);draw()}};s.querySelectorAll('.pls input').forEach(inp=>inp.oninput=()=>{names[+inp.dataset.k]=inp.value});
-   $('ub').onclick=showSelect;$('gr').onclick=()=>showRecords(cid);$('go').onclick=()=>{store('ts.round',null);const nm=names.slice(0,np).map((x,k)=>(x||'').trim()||(k?'Player '+(k+1):'Player 1'));for(let k=1;k<nm.length;k++){while(nm.slice(0,k).some(z=>z.toLowerCase()===nm[k].toLowerCase()))nm[k]+='+'}if(nm[0])store('ts.owner',nm[0]);startRound(cid,tee,part===1?9:0,part===2?18:9,nm.map((x,k)=>({name:x,owner:k===0})),gm)}};draw()}
+   s.querySelector('#tees').onclick=e=>{const b=e.target.closest('button');if(b){tee=+b.dataset.i;draw()}};s.querySelector('#parts').onclick=e=>{const b=e.target.closest('button');if(b){part=+b.dataset.i;draw()}};s.querySelector('#np').onclick=e=>{const b=e.target.closest('button');if(b){np=+b.dataset.i;draw()}};s.querySelector('#tod').onclick=e=>{const b=e.target.closest('button');if(b){tod=b.dataset.k;store('ts.tod',tod);draw()}};s.querySelector('#gm').onclick=e=>{const b=e.target.closest('button');if(b){gm=+b.dataset.i;store('ts.gimme',gm);draw()}};s.querySelectorAll('.pls input').forEach(inp=>inp.oninput=()=>{names[+inp.dataset.k]=inp.value});
+   $('ub').onclick=showSelect;$('gr').onclick=()=>showRecords(cid);$('go').onclick=()=>{store('ts.round',null);const nm=names.slice(0,np).map((x,k)=>(x||'').trim()||(k?'Player '+(k+1):'James'));for(let k=1;k<nm.length;k++){while(nm.slice(0,k).some(z=>z.toLowerCase()===nm[k].toLowerCase()))nm[k]+='+'}if(nm[0])store('ts.owner',nm[0]);startRound(cid,tee,part===1?9:0,part===2?18:9,nm.map((x,k)=>({name:x,owner:k===0})),gm,tod)}};draw()}
 function scCls(s,p){if(!s)return'';const d=s-p;return s===1?'sc-ea':d<=-2?'sc-ea':d===-1?'sc-b':d===0?'':d===1?'sc-bo':'sc-db'}
 function cardHTML(c,tee,start,n,sc,pt){const rows=[];const halves=[];for(let h=0;h<18;h+=9){const idx=[];for(let i=h;i<h+9;i++)if(i>=start&&i<start+n)idx.push(i);if(idx.length)halves.push(idx)}
   let out='';for(const idx of halves){const y=c.tees[tee].y,p=cpar(c,tee);const sumY=idx.reduce((a,i)=>a+y[i],0),sumP=idx.reduce((a,i)=>a+p[i],0);const lab=idx[0]<9?'OUT':'IN';
@@ -1551,7 +1557,7 @@ const _finishShot=finishShot;finishShot=function(){const a=G.anim,H=G.H;const pr
   if(g){G.lastGreat=g;setTimeout(()=>offerReplay(g),pre.kind==='sunk'?1400:700)}};
 
 /* ---------- pass-and-play (1-4 players, stroke play) ---------- */
-function ownerName(){return store('ts.owner')||'Player 1'}
+function ownerName(){return store('ts.owner')||'James'}
 function isMP(){return !!(G.round&&G.round.players&&G.round.players.length>1)}
 function mpOwnerUp(){return !isMP()||!!(G.round.players[G.cur||0]||{}).owner}
 function mpFresh(){return{ball:{x:0,y:0,surf:S_TEE},strokes:0,pen:0,putts:0,hs:{fir:null,gir:false,dr:0},done:false,lm:null}}
@@ -1624,6 +1630,68 @@ const _nextAddressG=nextAddress;nextAddress=function(){if(G.mode==='round'&&gimm
 function gimmeRound(){return!!(G.round&&G.round.gimme)}
 const _recSaveG=recSave;recSave=function(R){if(gimmeRound())return;return _recSaveG(R)};
 const _storeG=store;store=function(k,v){if(arguments.length>1&&gimmeRound()&&(k==='ts.rec'||String(k).indexOf('ts.recp.')===0))return;return _storeG.apply(this,arguments)};
+
+/* ---------- shareable end-of-round scorecard image (2D canvas, offline) ---------- */
+function cardData(r){const c=CID[r.cid];const P=cpar(c,r.tee),Y=c.tees[r.tee].y;const holes=[];for(let i=0;i<r.n;i++)holes.push({n:r.start+i+1,par:P[r.start+i],y:Y[r.start+i]});
+  const pls=(r.players&&r.players.length>1?r.players:[{name:ownerName(),sc:r.sc,pt:r.pt,fir:r.fir,gir:r.gir,dr:r.dr}]).map(p=>{const sc=holes.map((h,i)=>p.sc[i]||0);const tot=sc.reduce((a,b)=>a+b,0),par=holes.reduce((a,h,i)=>a+(sc[i]?h.par:0),0);
+    const fwN=holes.filter(h=>h.par>3).length,fw=holes.filter((h,i)=>h.par>3&&p.fir&&p.fir[i]).length,gir=holes.filter((h,i)=>p.gir&&p.gir[i]).length,putts=(p.pt||[]).slice(0,r.n).reduce((a,b)=>a+(b||0),0),ld=Math.max(0,...(p.dr||[]).map(x=>x||0));
+    return{name:p.name,sc,tot,tp:tot-par,fw,fwN,gir,putts,ld}});
+  const best=Math.min(...pls.map(p=>p.tp));return{cid:r.cid,course:c.name,home:!!c.home,loc:c.loc,date:r.d||todayKey(),tee:c.tees[r.tee].n,yards:holes.reduce((a,h)=>a+h.y,0),holes,players:pls,mp:pls.length>1,best,gimme:r.gimme||0,label:r.n===18?'18 holes':r.start?'Back 9':'Front 9'}}
+function drawCard(d){const halves=[];const a=d.holes.filter(h=>h.n<=9),b=d.holes.filter(h=>h.n>9);if(a.length)halves.push(a);if(b.length)halves.push(b);
+  const cols=d.holes.length+halves.length+(halves.length>1?1:0)+1;const lw=230,cw=Math.max(54,Math.floor((1100-80-lw)/cols)),W=Math.max(1100,lw+cols*cw+80),rowH=52,nP=d.players.length;
+  const H=190+rowH*(3+nP)+(d.mp?44:150)+44;const cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
+  const F=(w,s)=>w+' '+s+'px "Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif';
+  // background + header band
+  let gr=g.createLinearGradient(0,0,W,H);gr.addColorStop(0,'#0b1b14');gr.addColorStop(1,'#10291e');g.fillStyle=gr;g.fillRect(0,0,W,H);
+  gr=g.createLinearGradient(0,0,W,0);gr.addColorStop(0,'#0f3b2a');gr.addColorStop(1,'#16583d');g.fillStyle=gr;g.fillRect(0,0,W,150);g.fillStyle='#34e0a1';g.fillRect(0,150,W,5);
+  g.fillStyle='#fff';g.font=F(900,44);g.textBaseline='alphabetic';g.fillText(d.course.toUpperCase(),40,70);let x=40+g.measureText(d.course.toUpperCase()).width+18;
+  if(d.home){g.font=F(800,16);const tw=g.measureText('HOME COURSE').width+22;g.fillStyle='#ffd27a';g.beginPath();g.roundRect(x,44,tw,30,6);g.fill();g.fillStyle='#1b1405';g.fillText('HOME COURSE',x+11,65)}
+  g.fillStyle='rgba(255,255,255,.82)';g.font=F(600,20);g.fillText(`${d.date}  ·  ${d.tee} tees  ·  ${d.yards.toLocaleString()} yds  ·  ${d.label}`,40,112);
+  g.textAlign='right';g.font=F(900,30);g.fillStyle='#fff';g.fillText('TOUR SIM',W-40,66);g.font=F(600,15);g.fillStyle='rgba(255,255,255,.6)';g.fillText(VERSION+(d.gimme?'':''),W-40,90);
+  if(d.gimme){g.font=F(800,15);const t='GIMMES ON';const tw=g.measureText(t).width+20;g.fillStyle='#ffd27a';g.beginPath();g.roundRect(W-40-tw,100,tw,26,6);g.fill();g.fillStyle='#1b1405';g.fillText(t,W-50,118)}
+  g.textAlign='left';
+  // grid columns
+  const colsX=[];let cx=40+lw;const cells=[];for(let k=0;k<halves.length;k++){for(const h of halves[k]){cells.push({h});colsX.push(cx);cx+=cw}cells.push({sum:k,lab:halves[k][0].n<=9?'OUT':'IN'});colsX.push(cx);cx+=cw}
+  if(halves.length>1){cells.push({tot:1,lab:'TOT'});colsX.push(cx);cx+=cw}cells.push({tp:1,lab:'+/-'});colsX.push(cx);cx+=cw;
+  let y=190;const ctr=(t,xx,yy,col,font)=>{g.fillStyle=col;g.font=font;g.textAlign='center';g.fillText(String(t),xx+cw/2,yy);g.textAlign='left'};
+  const row=(label,fn,bg,bold)=>{g.fillStyle=bg;g.fillRect(40,y-34,cx-40,rowH-6);g.fillStyle='#fff';g.font=F(bold?800:700,19);g.fillText(label,56,y);cells.forEach((c,k)=>fn(c,colsX[k]));y+=rowH};
+  const hsum=(hs,f)=>hs.reduce((a,h)=>a+f(h),0);
+  row('HOLE',(c,X)=>ctr(c.h?c.h.n:c.lab,X,y,c.h?'#fff':'#34e0a1',F(800,18)),'rgba(52,224,161,.16)',1);
+  row('YARDS',(c,X)=>ctr(c.h?c.h.y:c.lab==='OUT'||c.lab==='IN'?hsum(halves[c.sum],h=>h.y):c.tot?d.yards:'',X,y,'rgba(255,255,255,.7)',F(600,15)),'rgba(255,255,255,.04)');
+  row('PAR',(c,X)=>ctr(c.h?c.h.par:c.lab==='OUT'||c.lab==='IN'?hsum(halves[c.sum],h=>h.par):c.tot?hsum(d.holes,h=>h.par):'',X,y,'#fff',F(700,18)),'rgba(255,255,255,.07)');
+  const idx=h=>d.holes.indexOf(h);
+  for(const p of d.players){const win=d.mp&&p.tp===d.best;
+    row((win?'★ ':'')+p.name.toUpperCase(),(c,X)=>{const yy=y;if(c.h){const s=p.sc[idx(c.h)];if(!s)return;const df=s-c.h.par;const mx=X+cw/2,my=yy-7;g.lineWidth=2.2;g.strokeStyle='#fff';
+        if(df<=-1){g.beginPath();g.arc(mx,my,17,0,TAU);g.stroke();if(df<=-2){g.beginPath();g.arc(mx,my,13,0,TAU);g.stroke()}}
+        else if(df>=1){g.strokeRect(mx-16,my-16,32,32);if(df>=2)g.strokeRect(mx-12,my-12,24,24)}
+        ctr(s,X,yy,'#fff',F(800,19))}
+      else if(c.sum!==undefined){ctr(hsum(halves[c.sum],h=>p.sc[idx(h)]||0),X,yy,'#fff',F(800,19))}
+      else if(c.tot){ctr(p.tot,X,yy,'#fff',F(900,20))}
+      else if(c.tp){ctr(p.tp===0?'E':(p.tp>0?'+':'')+p.tp,X,yy,p.tp<0?'#ff6b6b':p.tp>0?'#9fd3ff':'#fff',F(900,20))}},win?'rgba(255,210,122,.22)':'rgba(255,255,255,.1)',1)}
+  // stats
+  g.font=F(600,18);g.fillStyle='rgba(255,255,255,.85)';
+  if(!d.mp){const p=d.players[0];const st=[['TO PAR',p.tp===0?'E':(p.tp>0?'+':'')+p.tp],['FAIRWAYS',p.fw+'/'+p.fwN],['GREENS',p.gir+'/'+d.holes.length],['PUTTS',p.putts],['LONGEST DRIVE',p.ld?p.ld+' yds':'—']];
+    const bw=(cx-40)/st.length;st.forEach((s,k)=>{const X=40+k*bw;g.fillStyle='rgba(255,255,255,.06)';g.fillRect(X+4,y-20,bw-8,82);g.fillStyle='#34e0a1';g.font=F(800,14);g.fillText(s[0],X+20,y+6);g.fillStyle='#fff';g.font=F(900,30);g.fillText(String(s[1]),X+20,y+46)});y+=96;const cnt=k=>p.sc.filter((s,i)=>s&&s-d.holes[i].par===k).length,bird=p.sc.filter((s,i)=>s&&s-d.holes[i].par<=-1).length;let bh=-1;p.sc.forEach((s,i)=>{if(s&&(bh<0||s-d.holes[i].par<p.sc[bh]-d.holes[bh].par))bh=i});
+    const hl=[bird?bird+(bird>1?' birdies or better':' birdie or better'):'',cnt(0)+' pars',(p.sc.filter((s,i)=>s&&s-d.holes[i].par>=1).length)+' over par',bh>=0?'Best hole: #'+d.holes[bh].n+' ('+(SNAME[p.sc[bh]-d.holes[bh].par]||fmtPar(p.sc[bh]-d.holes[bh].par))+')':''].filter(Boolean).join('   ·   ');g.fillStyle='rgba(255,255,255,.85)';g.font=F(700,18);g.fillText(hl,44,y+8);y+=44}
+  else{const w=d.players.filter(p=>p.tp===d.best).map(p=>p.name);g.fillStyle='#ffd27a';g.font=F(900,24);g.fillText((w.length>1?'TIE: ':'WINNER: ')+w.join(' & ').toUpperCase(),40,y+4);y+=30}
+  g.fillStyle='rgba(255,255,255,.45)';g.font=F(500,14);g.fillText('Fan-made; layouts approximate; not affiliated with any club.',40,H-18);
+  return cv}
+function cardFileName(d){return'TourSim-'+d.course.split(/[\s(]/)[0].replace(/[^A-Za-z0-9]/g,'')+'-'+d.date+'.png'}
+function saveCardImage(d,btn){const cv=drawCard(d);cv.toBlob(b=>{const a=document.createElement('a');a.download=cardFileName(d);a.href=URL.createObjectURL(b);document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);if(btn){const t=btn.textContent;btn.textContent='Saved ✓';setTimeout(()=>btn.textContent=t,1600)}},'image/png')}
+function shareCardImage(d){const cv=drawCard(d);cv.toBlob(b=>{const f=new File([b],cardFileName(d),{type:'image/png'});navigator.share({files:[f],title:'Tour Sim · '+d.course}).catch(()=>{})},'image/png')}
+function addCardButtons(d){G.lastCard=d;const sh=$('sh');if(!sh||$('sImg'))return;const can=!!(navigator.canShare&&window.File&&(()=>{try{return navigator.canShare({files:[new File([new Uint8Array(1)],'x.png',{type:'image/png'})]})}catch(e){return false}})());
+  sh.insertAdjacentHTML('beforebegin',`<button class="btn c" id="sImg">Save scorecard image</button>${can?'<button class="btn alt c" id="sShare">Share</button>':''}`);$('sImg').onclick=()=>saveCardImage(d,$('sImg'));if(can)$('sShare').onclick=()=>shareCardImage(d)}
+const _finishRoundC=finishRound;finishRound=function(){const r=G.round?JSON.parse(JSON.stringify(G.round)):null;_finishRoundC();if(r)try{addCardButtons(cardData(r))}catch(e){console.warn('scorecard image',e)}};
+
+/* ---------- time of day (Morning / Midday / Sunset): lighting only, physics untouched ---------- */
+const TOD={
+  morning:{n:'Morning',sun:[-.5,-.62,.5],sunCol:[1.04,.92,.80],skyTop:[.34,.54,.82],skyHor:[.82,.86,.90],fog:[.84,.87,.90],far:[.16,.25,.15],fogMul:1.8},
+  midday:{n:'Midday',sun:[.44,-.6,.47],sunCol:[1.0,.88,.70],skyTop:[.26,.47,.80],skyHor:[.68,.77,.88],fog:[.70,.78,.86],far:[.17,.27,.14],fogMul:1},
+  sunset:{n:'Sunset',sun:[.8,-.42,.22],sunCol:[1.25,.64,.32],skyTop:[.24,.34,.62],skyHor:[1.0,.52,.3],fog:[.86,.56,.4],far:[.13,.17,.10],fogMul:.85}};
+function todKey(){const k=store('ts.tod');return TOD[k]?k:'midday'}
+function applyTOD(k){const t=TOD[k]||TOD.midday;const l=Math.hypot(...t.sun);for(let i=0;i<3;i++)SUN_FRAME[i]=t.sun[i]/l;
+  LIGHT.sunCol=t.sunCol.slice();LIGHT.skyTop=t.skyTop.slice();LIGHT.skyHor=t.skyHor.slice();LIGHT.fog=t.fog.slice();LIGHT.far=t.far.slice();LIGHT.fogMul=t.fogMul;G.tod=k}
+const _setHoleT=setHole;setHole=function(H,f){applyTOD(G.mode==='round'&&G.round&&G.round.tod?G.round.tod:todKey());return _setHoleT(H,f)};
 
 </script>
 </body>
