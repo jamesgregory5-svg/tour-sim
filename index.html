@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.4';
+const VERSION='v1.5';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -392,7 +392,7 @@ const SPECIES=[
   {n:'oak',h:[15,21],w:1.0,cb:.3},
   {n:'maple',h:[14,19],w:.78,cb:.3},
   {n:'cypress',h:[10,15],w:1.25,cb:.35},
-  {n:'palm',h:[13,19],w:.45,cb:.8},
+  {n:'palm',h:[12,20],w:.62,cb:.78},
   {n:'dogwood',h:[6,8.5],w:1.05,cb:.3},
   {n:'azalea',h:[1.6,2.6],w:2.0,cb:0},
   {n:'pitchpine',h:[20,27],w:.5,cb:.4}];
@@ -438,11 +438,20 @@ function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECI
     const lean=(v%2?1:-1)*R.range(.15,.35);const tx=bx+lean*tw*.6,ty=by-th*.55;trunk(g,bx,by,tx,ty,13,7,'#5a4636','#271d15');
     g.strokeStyle='#3b2d22';g.lineCap='round';for(let i=0;i<4;i++){g.lineWidth=R.range(3,5);g.beginPath();g.moveTo(tx,ty);g.lineTo(tx+R.range(-.45,.45)*tw,ty-R.range(10,60));g.stroke()}
     const hue=110+hv;for(let L=0;L<3;L++){const y=by-th*(.58+L*.15),w=tw*(.48-L*.1);for(let i=0;i<10;i++){const x=tx+R.range(-1,1)*w+lean*L*20;clump(g,x,y+R.range(-8,8),R.range(16,24),hue,22+L*4,13+L*6,R)}}}
-  else if(sp===4){// palm: curved slim trunk, fronds
-    const top={x:bx+R.range(-25,25),y:by-th*.84};g.strokeStyle='#7d6a50';g.lineWidth=8;g.lineCap='round';g.beginPath();g.moveTo(bx,by);g.quadraticCurveTo(bx+R.range(-20,20),by-th*.4,top.x,top.y);g.stroke();
-    g.strokeStyle='rgba(60,45,30,.5)';g.lineWidth=2;for(let i=0;i<20;i++){const t=i/20;const y=lerp(by,top.y,t);g.beginPath();g.moveTo(lerp(bx,top.x,t*t)-4,y);g.lineTo(lerp(bx,top.x,t*t)+4,y);g.stroke()}
-    for(let i=0;i<14;i++){const a=-Math.PI/2+R.range(-1.5,1.5)+(i%2?.3:-.3),L=R.range(.32,.5)*th;const ex=top.x+Math.cos(a)*L*.9,ey=top.y+Math.sin(a)*L*.45+L*.25;g.strokeStyle=hsl(95+hv,30,R.range(16,30));g.lineWidth=2;
-      for(let k=0;k<16;k++){const t=k/16;const px=lerp(top.x,ex,t),py=lerp(top.y,ey,t)-Math.sin(t*Math.PI)*L*.2;g.beginPath();g.moveTo(px,py);g.lineTo(px+R.range(-10,10),py+12);g.stroke()}}}
+  else if(sp===4){// palm (sabal / royal): curved tapering ringed trunk, dead-frond boot, globe of arching fronds
+    const lean=R.range(-28,28),top={x:bx+lean,y:by-th*.8},ctl={x:bx+lean*.15+R.range(-10,10),y:by-th*.45};const royal=v>=2;
+    const at=t=>({x:(1-t)*(1-t)*bx+2*(1-t)*t*ctl.x+t*t*top.x,y:(1-t)*(1-t)*by+2*(1-t)*t*ctl.y+t*t*top.y});
+    for(let i=0;i<40;i++){const t0=i/40,t1=(i+1)/40,p0=at(t0),p1=at(t1);const w0=royal?lerp(7.5,5.5,t0)*(1+.25*Math.sin(t0*9)):lerp(8,6,t0),w1=royal?lerp(7.5,5.5,t1)*(1+.25*Math.sin(t1*9)):lerp(8,6,t1);
+      trunk(g,p0.x,p0.y,p1.x,p1.y,w0,w1,royal?'#b7b1a4':'#857256',royal?'#6d685f':'#3e3226');if(!royal&&i%2===0){g.strokeStyle='rgba(40,30,20,.45)';g.lineWidth=1.4;g.beginPath();g.moveTo(p0.x-w0,p0.y);g.lineTo(p0.x+w0,p0.y+2);g.stroke()}}
+    if(royal){g.fillStyle='#5f7d3c';g.beginPath();g.ellipse(top.x,top.y+10,6.5,18,0,0,TAU);g.fill()}
+    else{for(let i=0;i<9;i++){const a=Math.PI/2+R.range(-1.1,1.1),L=R.range(16,26);g.strokeStyle=hsl(32,35,R.range(22,34));g.lineWidth=3;g.beginPath();g.moveTo(top.x,top.y+6);g.quadraticCurveTo(top.x+Math.cos(a)*L*.6,top.y+6,top.x+Math.cos(a)*L,top.y+6+Math.sin(a)*L);g.stroke()}}
+    const nf=royal?16:22;const fl=[];for(let i=0;i<nf;i++)fl.push({a:R()*TAU,up:R.range(-.15,1)});fl.sort((p,q)=>Math.sin(p.a)-Math.sin(q.a));// back fronds first
+    for(const f of fl){const L=(royal?R.range(.36,.48):R.range(.26,.36))*th,dx=Math.cos(f.a),dz=Math.sin(f.a);const ex=top.x+dx*L,lift=L*(.45*f.up),ey=top.y-lift+L*.55*(1-f.up)*(royal?1.1:.7);
+      const mx=top.x+dx*L*.5,my=top.y-lift*1.2-L*.15;const back=dz<0;const lit=back?16:24+12*Math.max(0,-dx*.4+f.up*.5);
+      const nl=royal?22:16;for(let k=1;k<=nl;k++){const t=k/nl;const px=(1-t)*(1-t)*top.x+2*(1-t)*t*mx+t*t*ex,py=(1-t)*(1-t)*top.y+2*(1-t)*t*my+t*t*ey;const ll=(royal?16:12)*(1-t*.7)*(.6+.4*Math.sin(t*Math.PI));
+        g.strokeStyle=hsl(92+hv+R.range(-6,6),32,lit+R.range(-4,4),.95);g.lineWidth=royal?1.5:2.2;
+        for(const sgn of[-1,1]){const ang=Math.atan2(ey-top.y,ex-top.x)+sgn*(royal?1.25:.85);g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.cos(ang)*ll,py+Math.sin(ang)*ll*.8+ll*.5);g.stroke()}}
+      g.strokeStyle=hsl(70,25,lit+6);g.lineWidth=1.4;g.beginPath();g.moveTo(top.x,top.y);g.quadraticCurveTo(mx,my,ex,ey);g.stroke()}}
   else if(sp===5){// dogwood: small tree, layered horizontal branches, white/pink blossoms
     trunk(g,bx,by,bx,by-th*.4,10,5,'#5d5146','#28201a');const pink=v>=2;
     for(let i=0;i<16;i++){const a=R()*TAU,d=Math.sqrt(R());clump(g,bx+Math.cos(a)*d*tw*.45,by-th*.65+Math.sin(a)*d*th*.25,R.range(18,26),95+hv,28,18+R()*8,R,8)}
@@ -455,7 +464,7 @@ function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECI
 // per-course species mix [species, weight]
 const TREE_MIX={
   augusta:[[0,.78],[5,.1],[1,.08],[2,.04]],pinevalley:[[7,.62],[0,.32],[1,.06]],sandhills:[[1,.5],[7,.3],[2,.2]],shadowcreek:[[0,.55],[7,.35],[1,.1]],peachtree:[[0,.45],[1,.3],[2,.15],[5,.1]],
-  cypress:[[3,.92],[7,.08]],pebble:[[3,.72],[7,.25],[1,.03]],pacificdunes:[[7,.6],[3,.25],[1,.15]],seminole:[[4,.6],[7,.25],[1,.15]],riviera:[[1,.45],[2,.25],[4,.15],[7,.15]],lacc:[[1,.45],[2,.2],[4,.15],[7,.2]],
+  cypress:[[3,.92],[7,.08]],pebble:[[3,.72],[7,.25],[1,.03]],pacificdunes:[[7,.6],[3,.25],[1,.15]],seminole:[[4,.86],[7,.14]],riviera:[[1,.45],[2,.25],[4,.15],[7,.15]],lacc:[[1,.45],[2,.2],[4,.15],[7,.2]],
   shinnecock:[[1,.6],[5,.4]],ngla:[[1,.55],[5,.45]],fishers:[[3,.5],[1,.3],[5,.2]],friars:[[7,.9],[1,.1]],oakmont:[[1,.5],[2,.5]],crystal:[[3,.4],[1,.3],[7,.3]],
   prairie:[[1,.6],[2,.4]],chicago:[[1,.55],[2,.45]]};
 const TREE_DEFAULT=[[1,.45],[2,.35],[7,.2]];
@@ -571,7 +580,7 @@ function buildHole0(course,geo,hi,teeIdx,opts){
   const blur=(code,rad)=>{const m=new Float32Array(W*H);for(let i=0;i<m.length;i++){const s=SU[i];m[i]=(typeof code==='function'?code(s):s===code)?1:0}
     const t=new Float32Array(W*H);for(let pass=0;pass<2;pass++){for(let j=0;j<H;j++){let acc=0;for(let i=-rad;i<W+rad;i++){if(i+rad<W)acc+=m[j*W+i+rad];if(i-rad-1>=0)acc-=m[j*W+i-rad-1];if(i>=0&&i<W)t[j*W+i]=acc/(2*rad+1)}}
       for(let i=0;i<W;i++){let acc=0;for(let j=-rad;j<H+rad;j++){if(j+rad<H)acc+=t[(j+rad)*W+i];if(j-rad-1>=0)acc-=t[(j-rad-1)*W+i];if(j>=0&&j<H)m[j*W+i]=acc/(2*rad+1)}}}return m};
-  const mG=blur(s=>s===5||s===4,3),mS=blur(6,1),mW=blur(7,2),mT=blur(3,2);
+  const mG=blur(s=>s===5||s===4,3),mS=blur(6,2),mW=blur(7,2),mT=blur(3,2);
   const und=st.und*(par===3?.8:1)*(DEM_OK?.55:1);const gBase=fbm2(gcx,gcy,seedN)*und+.35+dGC;
   const cellM=(m,i,j)=>{i=clamp(i,0,W-1);j=clamp(j,0,H-1);return m[j*W+i]};
   // famous deep pot bunkers (real OSM bunker polygons, deepened): Pine Valley 10 "Devil's Asshole", short-right of the green
@@ -712,7 +721,7 @@ function paintHole(H,PX){
   const pth=(q,P)=>{q.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?q.lineTo(x,y):q.moveTo(x,y)});q.closePath()};
   const fromS=(q,test,col)=>{const b2=document.createElement('canvas');b2.width=W;b2.height=Hh;const bq=b2.getContext('2d'),id=bq.createImageData(W,Hh);for(let j=0;j<Hh;j++)for(let i=0;i<W;i++){const o=((Hh-1-j)*W+i)*4,v=test(S[j*W+i]);id.data[o]=id.data[o+1]=id.data[o+2]=v;id.data[o+3]=255}bq.putImageData(id,0,0);q.imageSmoothingEnabled=true;q.drawImage(b2,0,0,W,Hh)};
   const cR=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='#fff';for(const P of(F.wa||[]).concat(H.sea)){pth(q,P);q.fill()}});
-  const cG=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.strokeStyle='rgb(110,110,110)';q.lineWidth=3.6;q.lineJoin='round';for(const P of F.gr){pth(q,P);q.stroke()}q.fillStyle='#fff';for(const P of F.gr){pth(q,P);q.fill()}});
+  const cG=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='rgb(40,40,40)';for(const P of(F.fw||[]).concat(F.te||[])){pth(q,P);q.fill()}q.strokeStyle='rgb(110,110,110)';q.lineWidth=3.6;q.lineJoin='round';for(const P of F.gr){pth(q,P);q.stroke()}q.fillStyle='#fff';for(const P of F.gr){pth(q,P);q.fill()}});
   const cB=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='#fff';for(const P of(F.bk||[])){pth(q,P);q.fill()}
     if(H.pews){const p=H.pews;q.save();pth(q,p.P);q.clip();q.translate(p.cx-X0,Y1-p.cy);q.rotate(-p.ang);q.fillStyle='#000';for(let k=0;k<p.n;k++){const u=p.u0+(k+.5)*p.sp,w=p.sp*.5;q.beginPath();q.roundRect(p.v0+3,-(u+w*.5),p.v1-p.v0-6,w,w*.5);q.fill()}q.restore()}});
   const native=H.st.trees<.4;
@@ -766,6 +775,9 @@ void main(){
       c=mix(texture(uCol,cuv-n,-.75).rgb,texture(uCol,cuv+n,-.75).rgb,sgB);sgB=1.-smoothstep(0.,aa*3.+.05,abs(m.b-.5));}}
   if(m.g>.5&&m.g<.98&&m.b<.02){vec2 gd=vec2(texture(uMask,cuv+vec2(ey.x,0.)).g-texture(uMask,cuv-vec2(ey.x,0.)).g,texture(uMask,cuv+vec2(0.,ey.y)).g-texture(uMask,cuv-vec2(0.,ey.y)).g);
     if(dot(gd,gd)>1e-6){vec2 n=normalize(gd)*1.1/uReg.zw;float aa=fwidth(m.g)*.9+.015;float sh=smoothstep(.72-aa,.72+aa,m.g);c=mix(texture(uCol,cuv-n,-.75).rgb,texture(uCol,cuv+n,-.75).rgb,sh);}}
+  {float fwm=smoothstep(.07,.13,m.g)*(1.-smoothstep(.3,.42,m.g))*(1.-m.b);float sy=(uReg.y+uReg.w-vP.y)/8.;float fy=fwidth(sy);
+    float sq=smoothstep(.5-fy,.5+fy,fract(sy))-smoothstep(1.-fy,1.,fract(sy))+(1.-smoothstep(0.,fy,fract(sy)));float vis=1.-smoothstep(.15,.5,fy);
+    c*=mix(1.,mix(1.045,.955,sq),fwm*vis);}
   float onG=smoothstep(.7,.8,m.g);c=mix(c,c*vec3(.93,1.1,.86)*1.07,onG*.55);
   float outd=length(max(abs(uv-.5)-.5,0.)*uReg.zw);
   vec4 nz=texture(uNoise,vP.xy*.045);vec4 nz2=texture(uNoise,vP.xy*.31);vec4 nz3=texture(uNoise,vP.xy*1.7);
