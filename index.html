@@ -156,7 +156,11 @@ td.l,th.l{text-align:left}
 .pls{display:grid;gap:6px;margin:0 0 10px}.pls label{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;opacity:.9}.pls label span{min-width:130px}.pls input{flex:1;background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:9px;padding:8px 10px;color:#fff;font-weight:700;font-size:14px;font-family:inherit}
 .lb{display:grid;gap:4px;margin:4px 0 10px}.lbr{display:grid;grid-template-columns:28px 1fr 64px 48px 40px;align-items:center;background:rgba(255,255,255,.06);border-radius:9px;padding:7px 10px;font-weight:800;font-size:14px}.lbr.cur{outline:1px solid var(--acc2)}.lbr .ps{opacity:.6}.lbr .th{opacity:.6;font-size:12px}.lbr .tp{text-align:right;color:var(--acc)}.lbr .tt{text-align:right;opacity:.75}
 .win{margin:8px 0;font-size:20px;font-weight:900;font-style:italic;color:var(--acc)}.trow{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;background:rgba(255,255,255,.05);border-radius:9px;font-size:13px;font-weight:700}
-.ver{position:absolute;right:12px;bottom:calc(8px + env(safe-area-inset-bottom));font-size:11px;font-weight:600;opacity:.5;letter-spacing:.05em;pointer-events:none}.verin{text-align:right;font-size:10.5px;opacity:.45;margin-top:8px;letter-spacing:.04em}</style>
+.ver{position:absolute;right:12px;bottom:calc(8px + env(safe-area-inset-bottom));font-size:11px;font-weight:600;opacity:.5;letter-spacing:.05em;pointer-events:none}.verin{text-align:right;font-size:10.5px;opacity:.45;margin-top:8px;letter-spacing:.04em}#gimme{position:fixed;left:0;right:0;top:38%;z-index:40;pointer-events:none;display:none;justify-content:center}
+#gimme.on{display:flex}#gimme .gb{display:flex;align-items:center;gap:18px;padding:12px 44px 12px 40px;background:linear-gradient(90deg,#0b1f17 0%,#103a2a 60%,#145c3e 100%);border-left:8px solid #34e0a1;color:#fff;transform:skewX(-12deg);box-shadow:0 10px 40px rgba(0,0,0,.45);animation:gin 1.5s cubic-bezier(.2,.9,.2,1) forwards}
+#gimme b{font-size:clamp(40px,8vw,86px);font-weight:900;letter-spacing:.06em;font-style:italic;line-height:1;transform:skewX(12deg)}#gimme span{font-size:clamp(13px,1.8vw,18px);font-weight:700;opacity:.85;letter-spacing:.08em;text-transform:uppercase;transform:skewX(12deg)}
+@keyframes gin{0%{transform:translateX(-110vw) skewX(-12deg)}18%{transform:translateX(0) skewX(-12deg) scale(1.04)}26%{transform:translateX(0) skewX(-12deg) scale(1)}82%{transform:translateX(0) skewX(-12deg);opacity:1}100%{transform:translateX(110vw) skewX(-12deg);opacity:0}}
+.gnote{font-size:12px;font-weight:700;color:#ffd27a;margin-top:6px;letter-spacing:.02em}</style>
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -186,10 +190,10 @@ td.l,th.l{text-align:left}
 <div class="screen" id="scSetup"></div>
 <div class="screen" id="scRecords"></div>
 <div class="screen dim" id="scCard"></div>
-<div id="fps"></div>
+<div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.2';
+const VERSION='v1.3';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -1207,7 +1211,7 @@ function drawMeter(){const c=$('meter');if(c.classList.contains('hide'))return;c
   q.strokeStyle='#3fe0b0';q.lineWidth=3;q.beginPath();q.arc(100,70,12,0,TAU);q.stroke();
   q.fillStyle='rgba(255,255,255,.75)';q.font='800 15px Helvetica,Arial,sans-serif';q.textAlign='left';q.fillText('HEEL',20,120);q.textAlign='right';q.fillText('TOE',180,120);
   const l=G.lm;if(l&&l.sx!==undefined){q.fillStyle='#ffd24a';q.beginPath();q.arc(100+l.sx*70,70-l.sy*45,11,0,TAU);q.fill();q.strokeStyle='#000';q.lineWidth=3;q.stroke();
-    $('tempo').textContent=l.ratio?l.ratio.toFixed(1)+' : 1':'—';$('acc').textContent=l.err===undefined?'—':Math.abs(l.err)<.025?'PERFECT':Math.abs(l.err)<.06?(l.err>0?'EARLY':'LATE'):(l.err>0?'V. EARLY':'V. LATE');
+    $('tempo').textContent=l.ratio?l.ratio.toFixed(2)+' : 1'+(Math.abs(l.ratio/SW_TEMPO-1)<.15?' · IDEAL':''):'—';$('acc').textContent=l.err===undefined?'—':Math.abs(l.err)<.025?'PERFECT':Math.abs(l.err)<.06?(l.err>0?'EARLY':'LATE'):(l.err>0?'V. EARLY':'V. LATE');
     $('fF').textContent=fmtDeg(l.face)+(Math.abs(l.face)<.5?'':l.face>0?' OPEN':' SHUT');$('fP').textContent=fmtDeg(l.path)+(Math.abs(l.path)<.5?'':l.path>0?' IN-OUT':' OUT-IN')}}
 const fmtDeg=v=>(v>0?'+':'')+v.toFixed(1)+'°';
 // ---------- mini map ----------
@@ -1257,10 +1261,10 @@ function inputInit(){
   $('lm').onclick=()=>{$('lm').classList.toggle('min');$('lmT').textContent=$('lm').classList.contains('min')?'+':'–'};
   $('rangeP').querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;G.rTab=b.dataset.t;for(const x of $('rangeP').querySelectorAll('.tabs button'))x.classList.toggle('sel',x===b);drawRangePanel()});}
 /* ---- timed 3-tap swing meter ----
-   tap 1: start backswing (meter rises 0 -> 115% in ~1.84 s; slowed 37.5% for easier power control)
-   tap 2: set power (meter then races back down at 3x speed = ideal 3:1 tempo)
+   tap 1: start backswing (meter rises 0 -> 115% in 2.6 s)
+   tap 2: set power (meter returns at 1.75x the rise speed = ideal 1.75:1 tempo)
    tap 3: at the sweet-spot line for accuracy (early = pull/draw, late = push/fade) */
-const SW_UP=1600,SW_DOWN=1000/3;
+const SW_UP=2600/1.15,SW_DOWN=SW_UP/1.75,SW_TEMPO=1.75;
 function swNow(){return performance.now()}
 function swValue(s,t){if(s.phase==='up')return Math.min(1.15,(t-s.t0)/SW_UP);return s.pow-(t-s.tPow)/SW_DOWN}
 function swingTap(){if(G.phase!=='address'&&G.phase!=='putt'&&G.phase!=='swing')return;const t=swNow();let s=G.sw;
@@ -1271,7 +1275,7 @@ function swingTap(){if(G.phase!=='address'&&G.phase!=='putt'&&G.phase!=='swing')
 function swingTick(){const s=G.sw;if(!s)return;const t=swNow();
   if(s.putt){const f=Math.min(1,(t-s.t0)/1700);s.ft=f*G.puttMax;s.pow=f;if(f>=1){/* stays at max until tapped */}updPutt();return}
   const v=swValue(s,t);if(s.phase==='up'){s.pow=v;if(v>=1.15){s.pow=1.15;s.tPow=t;s.phase='down'}}else{s.cur=v;if(v<-.22)swingRelease(-.22,t)}}
-function swingRelease(err,t){const s=G.sw;G.sw=null;const tb=(s.tPow-s.t0)*1000/SW_UP,td=t-s.tPow;const ratio=tb/Math.max(20,td);
+function swingRelease(err,t){const s=G.sw;G.sw=null;const tb=s.tPow-s.t0,td=t-s.tPow;const ratio=tb/Math.max(20,td);
   G.lastSw={pow:s.pow,err};const R=RNG(t+'');const e=Math.abs(err);
   const sx=clamp(err*2.2+gauss(R)*.05,-1,1),sy=clamp(gauss(R)*.05-(s.pow>1.02?(s.pow-1)*2.2:0)-(e>.12?.15:0),-1,1);
   const sh=SHAPES[G.shape];const face=sh.f-err*28+gauss(R)*.25,path=sh.p-err*8;
@@ -1287,7 +1291,7 @@ function setTraj(t){G.traj=G.traj===t?0:t;for(const b of $('shape').querySelecto
 function updPutt(){const ft=(G.sw&&G.sw.ft)||0;if(!$('pFt'))return;$('pFt').textContent=ft.toFixed(ft<10?1:0)+' ft';$('pBar').style.width=clamp(ft/G.puttMax*100,0,100)+'%'}
 
 /* ================= round flow ================= */
-function startRound(cid,tee,start,n,players){const c=CID[cid];const pl=(players&&players.length?players:[{name:ownerName(),owner:1}]).map(p=>({name:String(p.name).slice(0,16)||'Player',owner:!!p.owner,sc:[],pt:[],fir:[],gir:[],dr:[],pen:[]}));G.round={id:cid+':'+Date.now(),cid,tee,start,n,i:0,sc:[],pt:[],fir:[],gir:[],dr:[],pen:[],d:todayKey(),players:pl};G.mode='round';loadRoundHole(null)}
+function startRound(cid,tee,start,n,players,gimme){const c=CID[cid];const pl=(players&&players.length?players:[{name:ownerName(),owner:1}]).map(p=>({name:String(p.name).slice(0,16)||'Player',owner:!!p.owner,sc:[],pt:[],fir:[],gir:[],dr:[],pen:[]}));G.round={id:cid+':'+Date.now(),cid,tee,start,n,i:0,gimme:gimme||0,sc:[],pt:[],fir:[],gir:[],dr:[],pen:[],d:todayKey(),players:pl};G.mode='round';loadRoundHole(null)}
 function loadRoundHole(rs){const r=G.round,c=CID[r.cid],idx=r.start+r.i;hideScreens();$('hud').classList.add('on');$('modeBar').classList.add('hide');$('rangeP').classList.remove('on');clearLabels();
   G.allowed=null;G.target=null;G.extraBalls=null;G.cupOn=true;G.afterRest=null;
   const H=buildHole(c,GEO[c.id],idx,r.tee,{cupSeed:r.id});setHole(H);G.wind=windFor(r.id+'#'+idx);carryReset();
@@ -1335,7 +1339,7 @@ function showMenu(){const sv=store('ts.round');const R=recLoad();const st=R.stat
   </div><div class="disc">Fan-made; layouts approximate; not affiliated with any club.<br>Course geometry © OpenStreetMap contributors (ODbL). Scorecards from public sources. No characters, no logos.</div></div>`);
   if(res)$('mRes').onclick=()=>resumeRound(sv);$('mPlay').onclick=showSelect;$('mRange').onclick=startRange;$('mCtp').onclick=startCtp;$('mLd').onclick=startLd;$('mRec').onclick=()=>showRecords();$('mHow').onclick=showHow}
 function showHow(){show('scSetup',`<div class="pn"><div class="hdr"><h2>How to play</h2><button class="ib" id="hx">✕</button></div>
- <p><b>Swing (3 taps):</b> 1) tap, click or press <b>Space</b> to start the backswing and the meter rises. 2) Tap again to set <b>power</b>; the green mark is the recommended power for the shot, and above 100% is overswing. 3) The meter drops back fast. Tap when it crosses the white <b>sweet-spot line</b> for a pure strike. Tapping early pulls the ball left with draw spin (toe strike); tapping late pushes it right with fade spin (heel strike). Tempo is shown as backswing : downswing, and about 3 : 1 is ideal.</p>
+ <p><b>Swing (3 taps):</b> 1) tap, click or press <b>Space</b> to start the backswing and the meter rises. 2) Tap again to set <b>power</b>; the green mark is the recommended power for the shot, and above 100% is overswing. 3) The meter swings back down. Tap when it crosses the white <b>sweet-spot line</b> for a pure strike. Tapping early pulls the ball left with draw spin (toe strike); tapping late pushes it right with fade spin (heel strike). Tempo is shown as backswing : downswing; about 1.75 : 1 is ideal.</p>
  <p><b>Keyboard:</b> <b>Space</b> for the three taps. <b>Left/Right</b> (or A/D) aim, <b>Up/Down</b> (or W/S) club, <b>1-3</b> straight/draw/fade, <b>4/5</b> high/low, <b>V</b> camera, <b>C</b> scorecard.</p>
  <p><b>Aim:</b> drag sideways anywhere on the course view before you swing. The ring shows where the ball should land.</p>
  <p><b>Putting:</b> the grid shows the green: dots drift downhill, and the faster and redder they are, the steeper the slope. Tap to start the putt meter, which counts up in feet, then tap again to stroke it. The white tick marks the cup distance. Allow for the break.</p>
@@ -1349,19 +1353,20 @@ function showSelect(){const R=recLoad();const home=COURSES.filter(c=>c.home),top
   <div class="cards">${home.map(c=>courseCard(c,R)).join('')}</div><div class="sec">Golf Digest · America's 100 Greatest (2025-26) · Top 25</div><div class="cards">${top.map(c=>courseCard(c,R)).join('')}</div>
   <div class="disc">Fan-made; layouts approximate; not affiliated with any club.</div></div>`);
   $('sb').onclick=showMenu;s.querySelectorAll('.cc').forEach(b=>b.onclick=()=>showSetup(b.dataset.id))}
-function showSetup(cid){const c=CID[cid];if(!c||!c.tees||!c.tees.length){showSelect();return}let tee=0,part=2,np=1;const names=[ownerName(),...((store('ts.players')||[]).slice(-3).reverse())];while(names.length<4)names.push('Player '+(names.length+1));const tot=t=>c.tees[t].y.reduce((a,b)=>a+b,0);
+function showSetup(cid){const c=CID[cid];if(!c||!c.tees||!c.tees.length){showSelect();return}let tee=0,part=2,np=1,gm=+(store('ts.gimme')||0);const names=[ownerName(),...((store('ts.players')||[]).slice(-3).reverse())];while(names.length<4)names.push('Player '+(names.length+1));const tot=t=>c.tees[t].y.reduce((a,b)=>a+b,0);
   const draw=()=>{const s=show('scSetup',`<div class="pn"><div class="hdr"><button class="ib" id="ub">‹</button><h2 style="font-size:18px">${esc(c.name)}</h2></div>
    <div class="lo" style="opacity:.75;font-size:13px">${c.home?'<span class="badge" style="margin:0 6px 0 0">HOME COURSE</span>':'#'+c.rank+' · '}${esc(c.loc)}</div>
    <div class="sec">Tee box</div><div class="seg" id="tees">${c.tees.map((t,i)=>`<button data-i="${i}" class="${i===tee?'sel':''}">${esc(t.n)}<small>${tot(i).toLocaleString()} yds${t.par?' · par '+t.par.reduce((a,b)=>a+b,0):''}</small></button>`).join('')}</div>
    <div class="sec">Holes</div><div class="seg" id="parts">${['Front 9','Back 9','18 holes'].map((n,i)=>`<button data-i="${i}" class="${i===part?'sel':''}">${n}</button>`).join('')}</div>
    <div class="sec">Players · pass and play</div><div class="seg" id="np">${[1,2,3,4].map(k=>`<button data-i="${k}" class="${k===np?'sel':''}">${k===1?'Solo':k+' players'}</button>`).join('')}</div>
+   <div class="sec">Gimmes</div><div class="seg" id="gm">${[0,2,3].map(k=>`<button data-i="${k}" class="${k===gm?'sel':''}">${k?k+' ft':'Off'}</button>`).join('')}</div>${gm?'<div class="gnote">Gimmes on, no records. Putts inside '+gm+' ft are conceded for +1 stroke.</div>':''}
    <div class="pls">${Array.from({length:np},(_,k)=>`<label><span>${k===0?'You (profile owner)':'Player '+(k+1)}</span><input data-k="${k}" maxlength="16" value="${esc(names[k])}"></label>`).join('')}</div>
    <div class="scr">${cardHTML(c,tee,0,18,null,null)}</div>
    ${Object.keys(c.sig||{}).length?`<div class="sec">Signature holes</div><div style="font-size:13px;opacity:.85">${Object.entries(c.sig).map(([h,l])=>'#'+h+' '+esc(l)).join(' · ')}</div>`:''}
    <button class="btn c" id="go" style="margin-top:14px">Tee off</button><button class="btn alt c" id="gr">My records here</button>
    <div class="disc">Fan-made; layouts approximate; not affiliated with any club.<br>Scorecard: ${esc(c.src||'')}</div></div>`);
-   s.querySelector('#tees').onclick=e=>{const b=e.target.closest('button');if(b){tee=+b.dataset.i;draw()}};s.querySelector('#parts').onclick=e=>{const b=e.target.closest('button');if(b){part=+b.dataset.i;draw()}};s.querySelector('#np').onclick=e=>{const b=e.target.closest('button');if(b){np=+b.dataset.i;draw()}};s.querySelectorAll('.pls input').forEach(inp=>inp.oninput=()=>{names[+inp.dataset.k]=inp.value});
-   $('ub').onclick=showSelect;$('gr').onclick=()=>showRecords(cid);$('go').onclick=()=>{store('ts.round',null);const nm=names.slice(0,np).map((x,k)=>(x||'').trim()||(k?'Player '+(k+1):'Player 1'));for(let k=1;k<nm.length;k++){while(nm.slice(0,k).some(z=>z.toLowerCase()===nm[k].toLowerCase()))nm[k]+='+'}if(nm[0])store('ts.owner',nm[0]);startRound(cid,tee,part===1?9:0,part===2?18:9,nm.map((x,k)=>({name:x,owner:k===0})))}};draw()}
+   s.querySelector('#tees').onclick=e=>{const b=e.target.closest('button');if(b){tee=+b.dataset.i;draw()}};s.querySelector('#parts').onclick=e=>{const b=e.target.closest('button');if(b){part=+b.dataset.i;draw()}};s.querySelector('#np').onclick=e=>{const b=e.target.closest('button');if(b){np=+b.dataset.i;draw()}};s.querySelector('#gm').onclick=e=>{const b=e.target.closest('button');if(b){gm=+b.dataset.i;store('ts.gimme',gm);draw()}};s.querySelectorAll('.pls input').forEach(inp=>inp.oninput=()=>{names[+inp.dataset.k]=inp.value});
+   $('ub').onclick=showSelect;$('gr').onclick=()=>showRecords(cid);$('go').onclick=()=>{store('ts.round',null);const nm=names.slice(0,np).map((x,k)=>(x||'').trim()||(k?'Player '+(k+1):'Player 1'));for(let k=1;k<nm.length;k++){while(nm.slice(0,k).some(z=>z.toLowerCase()===nm[k].toLowerCase()))nm[k]+='+'}if(nm[0])store('ts.owner',nm[0]);startRound(cid,tee,part===1?9:0,part===2?18:9,nm.map((x,k)=>({name:x,owner:k===0})),gm)}};draw()}
 function scCls(s,p){if(!s)return'';const d=s-p;return s===1?'sc-ea':d<=-2?'sc-ea':d===-1?'sc-b':d===0?'':d===1?'sc-bo':'sc-db'}
 function cardHTML(c,tee,start,n,sc,pt){const rows=[];const halves=[];for(let h=0;h<18;h+=9){const idx=[];for(let i=h;i<h+9;i++)if(i>=start&&i<start+n)idx.push(i);if(idx.length)halves.push(idx)}
   let out='';for(const idx of halves){const y=c.tees[tee].y,p=cpar(c,tee);const sumY=idx.reduce((a,i)=>a+y[i],0),sumP=idx.reduce((a,i)=>a+p[i],0);const lab=idx[0]<9?'OUT':'IN';
@@ -1370,9 +1375,9 @@ function cardHTML(c,tee,start,n,sc,pt){const rows=[];const halves=[];for(let h=0
       if(pt)out+=`<tr><td class="l">Putts</td>${idx.map(i=>`<td>${pt[i-start]!==undefined&&sc[i-start]?pt[i-start]:''}</td>`).join('')}<td>${idx.reduce((a,i)=>a+(sc[i-start]?pt[i-start]||0:0),0)||''}</td></tr>`}
     out+='</table>'}return out}
 function showCard(r,live){const c=CID[r.cid];const s=show('scCard',`<div class="pn" style="max-width:640px"><div class="hdr"><h2 style="font-size:17px">${esc(c.name)} · ${esc(c.tees[r.tee].n)} tees</h2><button class="ib" id="cx">✕</button></div><div class="scr">${cardHTML(c,r.tee,r.start,r.n,r.sc,r.pt)}</div><div style="margin-top:8px;font-weight:800">To par: ${fmtPar(scoreToParR(r))}</div></div>`);
-  s.querySelector('.pn').insertAdjacentHTML('beforeend',`<div class="verin">Tour Sim ${VERSION}</div>`);$('cx').onclick=()=>{hideScreens()}}
+  s.querySelector('.pn').insertAdjacentHTML('beforeend',`${r.gimme?'<div class="gnote">Gimmes on ('+r.gimme+' ft), no records</div>':''}<div class="verin">Tour Sim ${VERSION}</div>`);$('cx').onclick=()=>{hideScreens()}}
 function scoreToParR(r){const c=CID[r.cid];let s=0;for(let i=0;i<r.sc.length;i++)if(r.sc[i])s+=r.sc[i]-cpar(c,r.tee)[(r.start!==undefined?r.start:r.st)+i];return s}
-function showSummary(rd,c){$('hud').classList.remove('on');const R=recLoad();const cr=R.courses[c.id];const best=cr.rounds.filter(x=>x.n===rd.n&&x.st===rd.st).every(x=>x===rd||x.tot>=rd.tot);
+function showSummary(rd,c){$('hud').classList.remove('on');const R=recLoad();const cr=R.courses[c.id]||{rounds:[rd]};const best=cr.rounds.filter(x=>x.n===rd.n&&x.st===rd.st).every(x=>x===rd||x.tot>=rd.tot);
   const fir=rd.fir.filter(x=>x===true).length,firN=rd.sc.map((_,i)=>cpar(c,rd.tee)[rd.st+i]>3).filter(Boolean).length,gir=rd.gir.filter(Boolean).length,putts=rd.pt.reduce((a,b)=>a+b,0);
   const s=show('scCard',`<div class="pn" style="max-width:640px"><div class="hdr"><h2>Round complete</h2></div><div style="font-size:15px;font-weight:800">${esc(c.name)} · ${esc(c.tees[rd.tee].n)} tees</div>
    <div class="stt"><div><b>${rd.tot}</b><span>Score</span></div><div><b>${fmtPar(rd.tot-rd.par)}</b><span>To par</span></div><div><b>${fir}/${firN}</b><span>Fairways</span></div><div><b>${gir}/${rd.n}</b><span>Greens</span></div><div><b>${putts}</b><span>Putts</span></div><div><b>${Math.max(0,...rd.dr)||'—'}</b><span>Longest drive</span></div></div>
@@ -1573,6 +1578,22 @@ const _finishRound=finishRound;finishRound=function(){const r=G.round;if(!isMP()
    <div class="win">${rows.filter(x=>x.tp===w.tp).map(x=>esc(x.name)).join(' & ')} ${rows.filter(x=>x.tp===w.tp).length>1?'tie':'wins'} · ${w.tot} (${fmtPar(w.tp)})</div>
    ${lbHTML(rr)}<div class="scr">${cardHTMLmp(c,rr.tee,rr.start,rr.n,rr.players)}</div><div class="disc">Records saved per player. Only the profile owner's (you) results count toward My records.</div>
    <button class="btn c" id="sm" style="margin-top:12px">Main menu</button><button class="btn alt c" id="sh">Copy result</button></div>`);$('sm').onclick=leaveToMenu;$('sh').onclick=()=>shareText('Tour Sim · '+c.name+' ('+c.tees[rr.tee].n+'): '+rows.map((x,k)=>(k+1)+'. '+x.name+' '+x.tot+' ('+fmtPar(x.tp)+')').join(' · '),$('sh'))};
+
+/* ---------- gimmes (Off / 2 ft / 3 ft) ---------- */
+function gimmeFt(){return(G.mode==='round'&&G.round&&G.round.gimme)||0}
+function gimmeCheck(){const g=gimmeFt();if(!g||G.phase==='holed'||G.phase==='gimme'||!G.H||!G.ball)return false;const b=G.ball,H=G.H;
+  if(b.surf!==S_GREEN&&b.surf!==S_FRINGE)return false;const d=Math.hypot(b.x-H.cup.x,b.y-H.cup.y)*3;if(!(d<=g)||G.strokes<1)return false;doGimme(d);return true}
+function gimmePanel(v){const e=$('pFt');if(e&&e.parentElement)e.parentElement.style.visibility=v?'':'hidden'}
+function doGimme(d){G.phase='gimme';G.sw=null;gimmePanel(false);G.gimmes=(G.gimmes||0)+1;showGimme(d);
+  setTimeout(()=>{if(G.phase!=='gimme')return;const H=G.H;G.strokes++;G.putts=(G.putts||0)+1;G.lastPos={x:G.ball.x,y:G.ball.y,surf:G.ball.surf};G.ball.x=H.cup.x;G.ball.y=H.cup.y;G.phase='holed';gimmePanel(true);sfx('cup');if(G.onHoled)G.onHoled()},1500)}
+function showGimme(d){const el=$('gimme');$('gimmeS').textContent=(isMP()?G.round.players[G.cur].name+' · ':'')+(d<1?Math.round(d*12)+' in':d.toFixed(1)+' ft')+' · +1 stroke';
+  el.classList.remove('on');void el.offsetWidth;el.classList.add('on');clearTimeout(showGimme.t);showGimme.t=setTimeout(()=>el.classList.remove('on'),1500)}
+const _setAddressG=setAddress;setAddress=function(f){gimmePanel(true);_setAddressG(f);gimmeCheck()};
+const _nextAddressG=nextAddress;nextAddress=function(){if(G.mode==='round'&&gimmeCheck())return;_nextAddressG()};
+// rounds with gimmes never write all-time records
+function gimmeRound(){return!!(G.round&&G.round.gimme)}
+const _recSaveG=recSave;recSave=function(R){if(gimmeRound())return;return _recSaveG(R)};
+const _storeG=store;store=function(k,v){if(arguments.length>1&&gimmeRound()&&(k==='ts.rec'||String(k).indexOf('ts.recp.')===0))return;return _storeG.apply(this,arguments)};
 
 </script>
 </body>
