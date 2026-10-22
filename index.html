@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.7';
+const VERSION='v1.8';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -609,7 +609,7 @@ function buildHole0(course,geo,hi,teeIdx,opts){
   const und=st.und*(par===3?.8:1)*(DEM_OK?.55:1);const gBase=fbm2(gcx,gcy,seedN)*und+.35+dGC;
   const cellM=(m,i,j)=>{i=clamp(i,0,W-1);j=clamp(j,0,H-1);return m[j*W+i]};
   // famous deep pot bunkers (real OSM bunker polygons, deepened): Pine Valley 10 "Devil's Asshole", short-right of the green
-  const POTS={'pinevalley:9':{dx:6,dy:-20,depth:2.3}};const pot=(()=>{const q=POTS[course.id+':'+hi];if(!q||!F.bk)return null;let best=null,bd=14;
+  const POTS={'pinevalley:9':{dx:6,dy:-20,depth:2.3},'riviera:5':{dx:0,dy:0,depth:1.5}};const pot=(()=>{const q=POTS[course.id+':'+hi];if(!q||!F.bk)return null;let best=null,bd=14;
     for(const P of F.bk){let a=0,cx=0,cy=0;for(let k=0;k<P.length;k++){const u=P[k],v=P[(k+1)%P.length];a+=u[0]*v[1]-v[0]*u[1];cx+=u[0];cy+=u[1]}a=Math.abs(a/2);cx/=P.length;cy/=P.length;
       const d=Math.hypot(cx-(gcx+q.dx),cy-(gcy+q.dy));if(a<60&&d<bd){bd=d;best={x:cx,y:cy,r:Math.max(1.6,Math.sqrt(a/Math.PI)),depth:q.depth}}}return best})();
   for(let j=0;j<NH;j++)for(let i=0;i<NW;i++){const x=i+X0,y=j+Y0;
@@ -748,7 +748,7 @@ function paintHole(H,PX){
   const pth=(q,P)=>{q.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?q.lineTo(x,y):q.moveTo(x,y)});q.closePath()};
   const fromS=(q,test,col)=>{const b2=document.createElement('canvas');b2.width=W;b2.height=Hh;const bq=b2.getContext('2d'),id=bq.createImageData(W,Hh);for(let j=0;j<Hh;j++)for(let i=0;i<W;i++){const o=((Hh-1-j)*W+i)*4,v=test(S[j*W+i]);id.data[o]=id.data[o+1]=id.data[o+2]=v;id.data[o+3]=255}bq.putImageData(id,0,0);q.imageSmoothingEnabled=true;q.drawImage(b2,0,0,W,Hh)};
   const cR=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='#fff';for(const P of(F.wa||[]).concat(H.sea)){pth(q,P);q.fill()}});
-  const cG=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='rgb(40,40,40)';for(const P of(F.fw||[]).concat(F.te||[])){pth(q,P);q.fill()}q.strokeStyle='rgb(110,110,110)';q.lineWidth=3.6;q.lineJoin='round';for(const P of F.gr){pth(q,P);q.stroke()}q.fillStyle='#fff';for(const P of F.gr){pth(q,P);q.fill()}});
+  const cG=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='rgb(40,40,40)';for(const P of(F.fw||[]).concat(F.te||[])){pth(q,P);q.fill()}q.strokeStyle='rgb(110,110,110)';q.lineWidth=3.6;q.lineJoin='round';for(const P of F.gr){pth(q,P);q.stroke()}q.fillStyle='#fff';for(const P of F.gr){pth(q,P);q.fill()}q.fillStyle='#000';for(const P of(F.bk||[])){pth(q,P);q.fill()}});
   const cB=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='#fff';for(const P of(F.bk||[])){pth(q,P);q.fill()}
     if(H.pews){const p=H.pews;q.save();pth(q,p.P);q.clip();q.translate(p.cx-X0,Y1-p.cy);q.rotate(-p.ang);q.fillStyle='#000';for(let k=0;k<p.n;k++){const u=p.u0+(k+.5)*p.sp,w=p.sp*.5;q.beginPath();q.roundRect(p.v0+3,-(u+w*.5),p.v1-p.v0-6,w,w*.5);q.fill()}q.restore()}});
   const native=H.st.trees<.4;
@@ -862,7 +862,7 @@ void main(){vec2 v=uEye.xy-iP.xy;float l=length(v);vNear=smoothstep(5.,13.,l);v=
  float qh=iP.w,qw=iW.x;float sw=sin(uTime*1.1+iP.x*.21+iP.y*.17)*.010*qh*aQ.y*aQ.y;
  vec3 p=vec3(iP.xy+r*aQ.x*qw+vec2(.7,.4)*sw,iP.z+aQ.y*qh);
  float cell=iW.y;float col=mod(cell,8.),row=floor(cell/8.);float ux=iW.w>0.?aQ.x+.5:.5-aQ.x;
- vUV=vec2((col+ux)/8.,(row+1.-aQ.y)/5.);vP=p;vTint=iW.z;vY=aQ.y;vFace=dot(v,normalize(vec2(.38,-.52)));
+ vUV=vec2((col+clamp(ux,.012,.988))/8.,(row+clamp(1.-aQ.y,.016,.996))/5.);vP=p;vTint=iW.z;vY=aQ.y;vFace=dot(v,normalize(vec2(.38,-.52)));
  gl_Position=uVP*vec4(p,1.);}`,`
 ${GLSL_COMMON}
 in vec3 vP;in vec2 vUV;in float vTint;in float vY;in float vFace;in float vNear;out vec4 o;uniform sampler2D uAtl;
@@ -943,9 +943,9 @@ function glSetHole(R,H,PX){
   // trees + border treeline
   const all=H.trees.slice();const TR=RNG('b'+H.course.id+H.hi);const mix=treeMix(H.course.id).filter(m=>m[0]!==6&&m[0]!==5);const dens=H.st.trees;
   const ring=(x,y)=>{const s=H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1));if(s===S_WATER)return;if(H.sea.length&&H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1))===S_WATER)return;
-    const sp=pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*TR.range(.9,1.25);all.push({x,y,sp,v:TR.int(4),h,w:h*S.w,out:1})};
-  if(dens>.1){const s0=dens>.3?8:16;for(let d=6;d<150;d+=s0+d*.12){const step=s0+d*.1;for(let x=H.X0-d;x<H.X1+d;x+=step){if(TR()<.7){ring(x+TR()*5,H.Y1+d+TR()*6);ring(x+TR()*5,H.Y0-d-TR()*6)}}
-    for(let y=H.Y0-d;y<H.Y1+d;y+=step){if(TR()<.7){ring(H.X0-d-TR()*6,y+TR()*5);ring(H.X1+d+TR()*6,y+TR()*5)}}}}
+    const sp=pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*TR.range(.68,1.32);all.push({x,y,sp,v:TR.int(4),h,w:h*S.w*TR.range(.85,1.2),out:1})};
+  if(dens>.1){const s0=dens>.3?8:16;for(let d=6;d<150;d+=s0+d*.12){const step=s0+d*.1;for(let x=H.X0-d;x<H.X1+d;x+=step){if(TR()<.68){ring(x+TR()*step*.95,H.Y1+d+TR()*step*1.3);ring(x+TR()*step*.95,H.Y0-d-TR()*step*1.3)}}
+    for(let y=H.Y0-d;y<H.Y1+d;y+=step){if(TR()<.68){ring(H.X0-d-TR()*step*1.3,y+TR()*step*.95);ring(H.X1+d+TR()*step*1.3,y+TR()*step*.95)}}}}
   if(all.length>6500)all.length=6500;
   {const n=all.length,ip=new Float32Array(n*4),iw=new Float32Array(n*4);all.forEach((t,i)=>{const S=SPECIES[t.sp];const inR=t.x>H.X0&&t.x<H.X1&&t.y>H.Y0&&t.y<H.Y1;
       const qh=t.h*S.qk;ip[i*4]=t.x;ip[i*4+1]=t.y;ip[i*4+2]=(inR?H.hAt(t.x,t.y):H.demAt(t.x,t.y)-.15)-.15;ip[i*4+3]=qh;iw[i*4]=qh*ATL.cw/ATL.ch;iw[i*4+1]=t.sp*4+t.v;iw[i*4+2]=hash2(i,7);iw[i*4+3]=hash2(7,i)<.5?1:-1});
@@ -1047,6 +1047,9 @@ function recommend(){G.recForced=false;
   const [ci,c]=list[pick];let pw=1;
   if(ci>=8){// partial wedge power by bisection
     let lo=.2,hi=1;for(let k=0;k<14;k++){const m=(lo+hi)/2,cc=clubCarry(ci,m,b.surf,G.wind,dir);if((forced?cc.carry-needC:cc.carry+(cc.total-cc.carry)*.6-d)<0)lo=m;else hi=m}pw=Math.round(hi*100)/100}
+  else{// longer clubs: back off power so the expected (carry + half roll) matches the plays-like number
+    const est=q=>{const cc=clubCarry(ci,q,b.surf,G.wind,dir);return forced?cc.carry-needC:cc.carry+(ci<4?(cc.total-cc.carry)*.5:(cc.total-cc.carry)*.6)-d};
+    if(est(1)>8){let lo=.8,hi=1;if(est(lo)>0)hi=lo;else for(let k=0;k<12;k++){const m=(lo+hi)/2;if(est(m)<0)lo=m;else hi=m}pw=Math.round(hi*100)/100}}
   G.rec={ci,pw,txt:CN[ci]+(pw<.99?' · '+Math.round(pw*100)+'% power':'')}}
 function defaultAim(){const H=G.H,b=G.ball;let t=curTarget();
   if(G.mode==='round'&&b.surf===S_TEE&&H.par>3&&G.club!==PUTTER){const c=clubCarry(G.club,1,S_TEE,G.wind,Math.PI/2);const s=Math.min(c.total,H.yards-40);const p=pointAt(H.line,Math.max(s,30));t={x:p[0],y:p[1]};
@@ -1712,7 +1715,7 @@ const _finishRoundC=finishRound;finishRound=function(){const r=G.round?JSON.pars
 
 /* ---------- time of day (Morning / Midday / Sunset): lighting only, physics untouched ---------- */
 const TOD={
-  morning:{n:'Morning',sun:[-.55,-.8,.22],sunCol:[1.6,1.36,1.06],skyTop:[.36,.52,.78],skyHor:[.80,.85,.92],fog:[.82,.87,.93],far:[.15,.22,.17],fogMul:.55,mist:1},
+  morning:{n:'Morning',sun:[-.55,-.8,.22],sunCol:[1.6,1.36,1.06],skyTop:[.22,.42,.78],skyHor:[.88,.85,.80],fog:[.82,.84,.86],far:[.15,.22,.17],fogMul:.55,mist:1},
   midday:{n:'Midday',sun:[.44,-.6,.47],sunCol:[1.0,.88,.70],skyTop:[.26,.47,.80],skyHor:[.68,.77,.88],fog:[.70,.78,.86],far:[.17,.27,.14],fogMul:.3,mist:0},
   sunset:{n:'Sunset',sun:[.85,.45,.16],sunCol:[2.6,1.3,.5],skyTop:[.22,.32,.6],skyHor:[1.0,.55,.32],fog:[.9,.6,.42],far:[.13,.17,.10],fogMul:.8}};
 function todKey(){const k=store('ts.tod');return TOD[k]?k:'midday'}
