@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.9';
+const VERSION='v1.10';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -743,7 +743,7 @@ function paintHole(H,PX){
     const bx=(t.x-X0)*PX,by=(Y1-t.y)*PX,br=Math.max(.8,rx*.35)*PX;const g2=g.createRadialGradient(bx,by,0,bx,by,br);g2.addColorStop(0,'rgba(10,18,5,.5)');g2.addColorStop(1,'rgba(10,18,5,0)');g.fillStyle=g2;g.beginPath();g.arc(bx,by,br,0,TAU);g.fill()}
   // mask: R water, G green, B sand, A fairway
   // anti-aliased mask at MS px/yd from the vector shapes (raster fallback for procedural cells)
-  const MS=2,mw=W*MS,mh=Hh*MS,md=new Uint8Array(mw*mh*4);
+  const MS=3,mw=W*MS,mh=Hh*MS,md=new Uint8Array(mw*mh*4);
   const chan=(fn)=>{const c=document.createElement('canvas');c.width=mw;c.height=mh;const q=c.getContext('2d');q.scale(MS,MS);fn(q);return q.getImageData(0,0,mw,mh).data};
   const pth=(q,P)=>{q.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?q.lineTo(x,y):q.moveTo(x,y)});q.closePath()};
   const fromS=(q,test,col)=>{const b2=document.createElement('canvas');b2.width=W;b2.height=Hh;const bq=b2.getContext('2d'),id=bq.createImageData(W,Hh);for(let j=0;j<Hh;j++)for(let i=0;i<W;i++){const o=((Hh-1-j)*W+i)*4,v=test(S[j*W+i]);id.data[o]=id.data[o+1]=id.data[o+2]=v;id.data[o+3]=255}bq.putImageData(id,0,0);q.imageSmoothingEnabled=true;q.drawImage(b2,0,0,W,Hh)};
@@ -751,7 +751,7 @@ function paintHole(H,PX){
   const cG=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='rgb(40,40,40)';for(const P of(F.fw||[]).concat(F.te||[])){pth(q,P);q.fill()}q.strokeStyle='rgb(110,110,110)';q.lineWidth=3.6;q.lineJoin='round';for(const P of F.gr){pth(q,P);q.stroke()}q.fillStyle='#fff';for(const P of F.gr){pth(q,P);q.fill()}q.fillStyle='#000';for(const P of(F.bk||[])){pth(q,P);q.fill()}});
   const cB=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='#fff';for(const P of(F.bk||[])){pth(q,P);q.fill()}
     if(H.pews){const p=H.pews;q.save();pth(q,p.P);q.clip();q.translate(p.cx-X0,Y1-p.cy);q.rotate(-p.ang);q.fillStyle='#000';for(let k=0;k<p.n;k++){const u=p.u0+(k+.5)*p.sp,w=p.sp*.5;q.beginPath();q.roundRect(p.v0+3,-(u+w*.5),p.v1-p.v0-6,w,w*.5);q.fill()}q.restore()}});
-  const native=H.st.trees<.4;
+  const native=H.st.trees<.4&&['links','dunes','prairie','coastal','heath'].includes(H.course.style)&&H.course.id!=='chicago';
   const cA=chan(q=>{fromS(q,s=>(native&&H.course.id!=='chicago'&&(s===8||s===0))?128:0);if(H.course.id==='chicago'){q.fillStyle='rgb(128,128,128)';for(const P of(F.na||[])){pth(q,P);q.fill()}}q.fillStyle='#000';for(const P of(F.fw||[]).concat(F.te||[],F.gr,F.bk||[])){pth(q,P);q.fill()}});
   for(let r=0;r<mh;r++){const d0=(mh-1-r)*mw*4,s0=r*mw*4;for(let i=0;i<mw*4;i+=4){md[d0+i]=cR[s0+i];md[d0+i+1]=cG[s0+i];md[d0+i+2]=cB[s0+i];md[d0+i+3]=cA[s0+i]}}
   return{cv,mask:md,mw,mh}}
@@ -813,6 +813,7 @@ void main(){
   float dE=length(vP-uEye);float near=1.-smoothstep(10.,85.,dE);vec4 nz4=texture(uNoise,vP.xy*5.3);vec4 nz5=texture(uNoise,vP.xy*13.1+.37);
   vec2 dx=dFdx(vP.xy),dy=dFdy(vP.xy);float fp=min(length(dx),length(dy))*1.6;float w3=1.-smoothstep(.2,.55,fp*1.7),w4=1.-smoothstep(.2,.55,fp*5.3),w5=1.-smoothstep(.2,.55,fp*13.1);
   c*=mix(1.,.9+.2*nz.g,.7)*mix(1.,.93+.14*nz2.r,grass)*mix(1.,.9+.2*nz3.g,.7*w3)*mix(1.,.8+.4*nz4.b,grass*w4*.85)*mix(1.,.76+.48*nz5.a,grass*w5*.75);
+  {float w6=(1.-smoothstep(.2,.55,fp*31.))*(1.-smoothstep(6.,40.,dE));float bl6=texture(uNoise,vP.xy*vec2(31.,23.)+.71).r*.6+texture(uNoise,vP.xy*vec2(61.,47.)+.13).g*.4;c*=mix(1.,.7+.6*bl6,grass*w6*.7);}
   c=pow(c,vec3(2.2));
   vec3 N=normalize(vN);vec3 Ne=normalize(vec3(N.xy*4.2,N.z));float df=max(dot(Ne,uSun),0.);
   vec3 amb=mix(uSkyHor*.35,uSkyTop*.5,N.z*.5+.5);float gold=1.-smoothstep(.2,.38,uSun.z);
@@ -892,7 +893,7 @@ void main(){float a=abs(vA.y);float glow=exp(-a*a*6.)*.55;float core=1.-smoothst
   // noise texture
   {const N=256,d=new Uint8Array(N*N*4);const RN=RNG(77);const base=[];for(let c=0;c<4;c++){const f=[4,8,16,32][c];for(let j=0;j<N;j++)for(let i=0;i<N;i++){let v=0,a=.5,fr=f;for(let o=0;o<3;o++){const gx=i/N*fr,gy=j/N*fr;const x0=Math.floor(gx),y0=Math.floor(gy),fx=gx-x0,fy=gy-y0,u=fx*fx*(3-2*fx),w=fy*fy*(3-2*fy);
       const hh=(a1,b1)=>hash2(((a1%fr)+fr)%fr+c*1000+o*77,((b1%fr)+fr)%fr);v+=a*((hh(x0,y0)*(1-u)+hh(x0+1,y0)*u)*(1-w)+(hh(x0,y0+1)*(1-u)+hh(x0+1,y0+1)*u)*w);a*=.5;fr*=2}d[(j*N+i)*4+c]=Math.min(255,v/.875*255)}}
-    R.noise=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,R.noise);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,N,N,0,gl.RGBA,gl.UNSIGNED_BYTE,d);gl.generateMipmap(gl.TEXTURE_2D);{const ax=gl.getExtension('EXT_texture_filter_anisotropic');if(ax)gl.texParameterf(gl.TEXTURE_2D,ax.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(8,gl.getParameter(ax.MAX_TEXTURE_MAX_ANISOTROPY_EXT)))}
+    R.noise=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,R.noise);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,N,N,0,gl.RGBA,gl.UNSIGNED_BYTE,d);gl.generateMipmap(gl.TEXTURE_2D);{const ax=gl.getExtension('EXT_texture_filter_anisotropic');if(ax)gl.texParameterf(gl.TEXTURE_2D,ax.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(16,gl.getParameter(ax.MAX_TEXTURE_MAX_ANISOTROPY_EXT)))}
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT)}
   // primitive meshes
   const meshFrom=(P,N,I)=>vao([{loc:0,n:3,d:new Float32Array(P)},{loc:1,n:3,d:new Float32Array(N)}],new Uint16Array(I));
@@ -1021,7 +1022,7 @@ function clubCarry(ci,power,surf,wind,dir){const k=ci+'|'+power.toFixed(2)+'|'+s
 function windFor(seed){const R=RNG('w'+seed);const sp=R()<.15?R.range(0,2):R.range(2,R()<.25?16:11);const a=R()*TAU;return{x:Math.cos(a)*sp*MPS,y:Math.sin(a)*sp*MPS,mph:Math.round(sp),a}}
 function distYd(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 // ---------- hole lifecycle ----------
-function setHole(H,flags){G.H=H;const px=Math.min(G.PXmax,4096/H.W,4096/H.H);glSetHole(G.R,H,px);G.flags=flags||[{x:H.cup.x,y:H.cup.y}];drawMiniBase()}
+function setHole(H,flags){G.H=H;G.holeAt=performance.now();const mt=Math.min(8192,(G.R&&G.R.gl&&G.R.gl.getParameter(G.R.gl.MAX_TEXTURE_SIZE))||4096);const px=Math.min(G.PXmax,mt/H.W,mt/H.H);glSetHole(G.R,H,px);G.flags=flags||[{x:H.cup.x,y:H.cup.y}];drawMiniBase()}
 /* slope at the ball relative to the aim: up = uphill degrees (+ uphill), side = ball above feet degrees (+ above, right-handed) */
 function lieInfo(){const H=G.H,b=G.ball;if(!H||!H.gradAt)return null;const g=H.gradAt(b.x,b.y),ax=Math.cos(G.aim),ay=Math.sin(G.aim);
   const up=Math.atan(g[0]*ax+g[1]*ay)*180/Math.PI,side=Math.atan(g[0]*ay-g[1]*ax)*180/Math.PI;return{up,side}}
@@ -1029,7 +1030,7 @@ function lieText(){const l=lieInfo();if(!l)return'';const p=[];if(Math.abs(l.up)
 function elevTo(t){const H=G.H,b=G.ball;return H.hAt(t.x,t.y)-H.hAt(b.x,b.y)}
 function playsLike(t){const d=distYd(G.ball,t);return d+elevTo(t)}
 function curTarget(){return G.target||G.H.cup}
-function recommend(){G.recForced=false;
+function recommend(){G.recForced=false;G.recFront=0;
   const H=G.H,b=G.ball,tgt=curTarget();const d=b.surf===S_GREEN?distYd(b,tgt):playsLike(tgt);
   if(b.surf===S_GREEN||(b.surf===S_FRINGE&&d<25)){G.rec={ci:PUTTER,pw:1,txt:'Putter'};return}
   const dir=Math.atan2(tgt.y-b.y,tgt.x-b.x);let pick=-1;const list=[];
@@ -1041,14 +1042,18 @@ function recommend(){G.recForced=false;
     return}
   // forced carry: water or sand between the ball and the target -> pick by carry, not by total
   const D0=distYd(b,tgt),elv=d-D0;let haz=0;for(let t=12;t<D0-1;t+=1.5){const x=b.x+Math.cos(dir)*t,y=b.y+Math.sin(dir)*t,s=H.surfAt(x,y);if(s===S_WATER||s===S_DEEP||s===S_SAND)haz=t}
-  const forced=haz>0&&haz>D0*.45;const needC=forced?Math.max(d-3,haz+elv+6):0;G.recForced=forced;
-  for(let i=list.length-1;i>=0;i--){const [ci,c]=list[i];if(forced?c.carry>=needC:c.carry+(ci<4?(c.total-c.carry)*.5:(c.total-c.carry)*.6)>=d){pick=i;break}}
+  const forced=haz>0&&haz>D0*.45;let needC=forced?Math.max(d-3,haz+elv+6):0;G.recForced=forced;
+  // carry to the front of the green when there is trouble short of it, or when the green sits uphill (no forward roll to count on)
+  if(D0>60&&!forced){let front=-1;for(let t=D0*.4;t<D0+.1;t+=1){const s=H.surfAt(b.x+Math.cos(dir)*t,b.y+Math.sin(dir)*t);if(s===S_GREEN||s===S_FRINGE){front=t;break}}
+    if(front>0){let tr=false;for(let t=Math.max(12,front-35);t<front;t+=1.5){const s=H.surfAt(b.x+Math.cos(dir)*t,b.y+Math.sin(dir)*t);if(s!==S_FW&&s!==S_FRINGE&&s!==S_GREEN&&s!==S_TEE){tr=true;break}}
+      const frontPL=front+elv;if(tr||elv>4){needC=Math.max(frontPL+2,elv>4?d-8:0);G.recFront=Math.round(frontPL)}}}
+  for(let i=list.length-1;i>=0;i--){const [ci,c]=list[i];if(needC>0&&!forced?(c.carry>=needC&&c.carry+(c.total-c.carry)*.5>=d-4):forced?c.carry>=needC:c.carry+(ci<4?(c.total-c.carry)*.5:(c.total-c.carry)*.6)>=d){pick=i;break}}
   if(pick<0){const [ci,c]=list[0];G.rec={ci,pw:1,txt:CN[ci]+' · '+Math.round(c.carry)+' carry'};return}
   const [ci,c]=list[pick];let pw=1;
   if(ci>=8){// partial wedge power by bisection
     let lo=.2,hi=1;for(let k=0;k<14;k++){const m=(lo+hi)/2,cc=clubCarry(ci,m,b.surf,G.wind,dir);if((forced?cc.carry-needC:cc.carry+(cc.total-cc.carry)*.6-d)<0)lo=m;else hi=m}pw=Math.round(hi*100)/100}
   else{// longer clubs: back off power so the expected (carry + half roll) matches the plays-like number
-    const est=q=>{const cc=clubCarry(ci,q,b.surf,G.wind,dir);return forced?cc.carry-needC:cc.carry+(ci<4?(cc.total-cc.carry)*.5:(cc.total-cc.carry)*.6)-d};
+    const est=q=>{const cc=clubCarry(ci,q,b.surf,G.wind,dir);const e=cc.carry+(ci<4?(cc.total-cc.carry)*.5:(cc.total-cc.carry)*.6)-d;return forced?cc.carry-needC:needC>0?Math.min(cc.carry-needC,e+8):e};
     if(est(1)>8){let lo=.8,hi=1;if(est(lo)>0)hi=lo;else for(let k=0;k<12;k++){const m=(lo+hi)/2;if(est(m)<0)lo=m;else hi=m}pw=Math.round(hi*100)/100}}
   G.rec={ci,pw,txt:CN[ci]+(pw<.99?' · '+Math.round(pw*100)+'% power':'')}}
 function defaultAim(){const H=G.H,b=G.ball;let t=curTarget();
@@ -1217,11 +1222,13 @@ function frame(now){requestAnimationFrame(frame);const _t0=performance.now();
   // fps / auto resolution
   PERF.js.push(performance.now()-_t0);if(PERF.js.length>600)PERF.js.shift();
   if(++PERF.n%30===0){const a=PERF.ft.slice(-90);const avg=a.reduce((x,y)=>x+y,0)/a.length;if(G.debug)$('fps').textContent=Math.round(1000/avg)+' fps';
-    if(avg>21&&G.scale>.6&&now-PERF.lowAt>2500){G.scale=Math.max(.6,G.scale*.85);PERF.lowAt=now}}}
+    const base=G.scaleBase||G.scale,floor=Math.max(1,base*.75);if(G.holeAt===undefined)G.holeAt=now;
+    if(now-G.holeAt>4000&&avg>24&&G.scale>floor&&now-PERF.lowAt>3000){G.scale=Math.max(floor,G.scale*.9);PERF.lowAt=now}
+    else if(avg<14&&G.scale<base&&now-PERF.lowAt>5000){G.scale=Math.min(base,G.scale*1.1);PERF.lowAt=now}}}
 function resize(){const c=G.R.canvas,s=G.scale||1;const w=Math.round(innerWidth*s),h=Math.round(innerHeight*s);if(c.width!==w||c.height!==h){c.width=w;c.height=h}}
 function nextAddress(){if(G.phase==='holed')return;if(G.mode==='round'){if(G.strokes>=G.H.par+5&&G.phase!=='holed'){pickUp();return}saveRound()}setAddress()}
 // ---------- landing ring ----------
-function calcRing(){G.ringDirty=false;const b=G.ball;if(G.club===PUTTER){G.ring=null;return}const pw=G.club===G.rec.ci?G.rec.pw:1;
+function calcRing(){G.ringDirty=false;const b=G.ball;if(G.club===PUTTER){G.ring=null;return}let pw=G.club===G.rec.ci?(G.rec.pwPhys||G.rec.pw):1;if(typeof chipPhysForRing==='function'){const q=chipPhysForRing();if(q!==null)pw=q}
   const r=simShot(G.club,pw,b.surf,G.wind,G.shape,G.traj,G.aim,b.x,b.y);const F=r.F;G.ring={x:F.lx,y:F.ly,r:clamp(1.5+F.carry*.025,1.5,8),carry:F.carry}}
 // ---------- HUD ----------
 function showThird(stage){G.lmStage=stage;const lm=G.lm;if(!lm||lm.putt!==undefined&&G.anim&&G.anim.put)return;$('tLab').textContent=lm.shape||'SHOT';$('tCarry').textContent=Math.round(lm.carry);$('tTot').textContent=stage>1?Math.round(lm.total):'—';$('tBs').textContent=Math.round(lm.ball);
@@ -1243,8 +1250,8 @@ function updHUD(){const H=G.H;if(!H)return;const b=G.ball;const isR=G.mode==='ro
   $('rec').innerHTML=G.rec?'Recommended: <b>'+recText()+'</b>':'';$('rec').classList.toggle('hide',pu||G.phase==='intro');
   if(pu){$('pInfo').textContent='CUP '+Math.round(d*3)+' FT · TAP TO START · TAP TO STRIKE';G.puttMax=Math.max(20,Math.ceil(d*3*1.6/5)*5);$('pCup').style.left=clamp(d*3/G.puttMax*100,0,100)+'%'}
   fillLM()}
-function recText(){const r=G.rec,b=G.ball;if(!r||r.ci===PUTTER)return r?r.txt:'';const c=clubCarry(r.ci,r.pw,b.surf===S_GREEN?S_FW:b.surf,G.wind||{x:0,y:0},G.aim);
-  const extra=/lay up/.test(r.txt)?' · lay up':(G.recForced&&r.ci<13?' · must carry':'');return CN[r.ci]+(r.pw<.99?' '+Math.round(r.pw*100)+'%':'')+' · '+Math.round(c.carry)+' carry / '+Math.round(c.total)+' total'+extra}
+function recText(){const r=G.rec,b=G.ball;if(!r||r.ci===PUTTER)return r?r.txt:'';const c=clubCarry(r.ci,r.pwPhys||r.pw,b.surf===S_GREEN?S_FW:b.surf,G.wind||{x:0,y:0},G.aim);
+  const extra=/lay up/.test(r.txt)?' · lay up':(G.recForced&&r.ci<13?' · must carry':G.recFront&&r.ci<13?' · '+G.recFront+' to front':'');return CN[r.ci]+(r.pw<.99?' '+Math.round(r.pw*100)+'%':'')+' · '+Math.round(c.carry)+' carry / '+Math.round(c.total)+' total'+extra}
 function updClubs(){const b=G.ball;const el=$('clubs');const allowed=G.allowed||CN.map((_,i)=>i);
   el.innerHTML=allowed.map(ci=>{let sm='';if(ci<13&&G.wind){const c=clubCarry(ci,1,b.surf===S_GREEN?S_FW:b.surf,G.wind,G.aim);sm=Math.round(c.carry)}else sm='putt';
     return`<button data-c="${ci}" class="${ci===G.club?'sel':''} ${G.rec&&ci===G.rec.ci?'rec':''}">${CN[ci]}<small>${sm}</small></button>`}).join('');G.ringDirty=true}
@@ -1258,15 +1265,15 @@ function drawMeter(){const c=$('meter');if(c.classList.contains('hide'))return;c
   arc(-.06,.06,'rgba(255,210,74,.55)',20);arc(-.025,.025,'rgba(63,224,176,1)',20);
   const tick=(v,col,len,w)=>{const a=ang(v);g.strokeStyle=col;g.lineWidth=w;g.beginPath();g.moveTo(cx+Math.cos(a)*(R-len),cy+Math.sin(a)*(R-len));g.lineTo(cx+Math.cos(a)*(R+len),cy+Math.sin(a)*(R+len));g.stroke()};
   tick(0,'#fff',24,5);
-  const rp=G.club===(G.rec&&G.rec.ci)?G.rec.pw:1;tick(rp,'#3fe0b0',22,6);
+  const chip=typeof chipOn==='function'&&chipOn();const rp=chip?(G.club===G.rec.ci?G.rec.pw:chipMeterPw()):G.club===(G.rec&&G.rec.ci)?G.rec.pw:1;tick(rp,'#3fe0b0',22,6);
   for(let v=.25;v<1.01;v+=.25)tick(v,'rgba(255,255,255,.5)',12,2);
   const s=G.sw;let val=0,label='';
-  if(s&&!s.putt){if(s.phase==='up'){val=s.pow;const gr=g.createLinearGradient(0,H,0,0);gr.addColorStop(0,'#3fe0b0');gr.addColorStop(.75,'#ffd24a');gr.addColorStop(1,'#ff6a4a');g.lineCap='round';g.strokeStyle=gr;g.lineWidth=12;g.beginPath();g.arc(cx,cy,R,ang(s.pow),ang(lo+.001));g.stroke();label=Math.round(s.pow*100)+'%'}
-    else{tick(s.pow,'#ffd24a',26,7);const v=s.cur!==undefined?s.cur:s.pow;const a=ang(v);g.fillStyle='#fff';g.beginPath();g.arc(cx+Math.cos(a)*R,cy+Math.sin(a)*R,13,0,TAU);g.fill();g.strokeStyle='#000';g.lineWidth=3;g.stroke();label=Math.round(s.pow*100)+'%'}}
-  else if(G.lastSw)label=Math.round(G.lastSw.pow*100)+'%';
+  if(s&&!s.putt){if(s.phase==='up'){val=s.pow;const gr=g.createLinearGradient(0,H,0,0);gr.addColorStop(0,'#3fe0b0');gr.addColorStop(.75,'#ffd24a');gr.addColorStop(1,'#ff6a4a');g.lineCap='round';g.strokeStyle=gr;g.lineWidth=12;g.beginPath();g.arc(cx,cy,R,ang(s.pow),ang(lo+.001));g.stroke();label=chip?Math.round(s.pow*G.chip.max)+' YD':Math.round(s.pow*100)+'%'}
+    else{tick(s.pow,'#ffd24a',26,7);const v=s.cur!==undefined?s.cur:s.pow;const a=ang(v);g.fillStyle='#fff';g.beginPath();g.arc(cx+Math.cos(a)*R,cy+Math.sin(a)*R,13,0,TAU);g.fill();g.strokeStyle='#000';g.lineWidth=3;g.stroke();label=chip?Math.round(s.pow*G.chip.max)+' YD':Math.round(s.pow*100)+'%'}}
+  else if(chip)label=Math.round(rp*G.chip.max)+' YD';else if(G.lastSw)label=Math.round(G.lastSw.pow*100)+'%';
   g.fillStyle='#fff';g.font='900 46px Helvetica,Arial,sans-serif';g.textAlign='right';g.textBaseline='alphabetic';g.fillText(label||'0%',W*.99,H*.99);
   g.font='900 19px Helvetica,Arial,sans-serif';g.textAlign='left';g.fillStyle='rgba(255,255,255,.9)';
-  g.fillText('POWER',8,H*.1);g.fillStyle='#3fe0b0';g.fillText('SWEET',8,H*.86);g.fillText('SPOT',8,H*.86+21);
+  g.fillText(chip?'CHIP · FULL '+G.chip.max+' YD':'POWER',8,H*.1);g.fillStyle='#3fe0b0';g.fillText('SWEET',8,H*.86);g.fillText('SPOT',8,H*.86+21);
   const ph=$('hintT');if(ph){const t=!s?'TAP, CLICK OR PRESS SPACE TO SWING':s.phase==='up'?'TAP TO SET POWER':'TAP ON THE WHITE LINE';if(ph.textContent!==t)ph.textContent=t}
   // strike panel
   const sc=$('strikeC'),q=sc.getContext('2d');const w=200,h=140;q.clearRect(0,0,w,h);
@@ -1540,7 +1547,7 @@ function menuBG(){const c=CID['augusta'];if(!G.bgH){G.bgH=buildHole(c,GEO.august
 function menuCam(dt){const H=G.H,c=H.cup;const a=G.time*.05;const r=150;const ex=c.x+Math.cos(a-1.9)*r,ey=c.y+Math.sin(a-1.9)*r;G.cam={eye:[ex,ey,H.hAt(clamp(ex,H.X0,H.X1),clamp(ey,H.Y0,H.Y1))+22],at:[c.x,c.y,2],fov:.75}}
 function init(){
   const cv=$('gl');const R=mkGL(cv);if(!R){document.body.insertAdjacentHTML('beforeend','<div class="screen on"><div class="pn">WebGL2 is required. Try a recent Chrome, Edge, Safari or Firefox.</div></div>');return}
-  G.R=R;const mob=Math.min(innerWidth,innerHeight)<700;G.scale=Math.min(devicePixelRatio||1,mob?1.6:2);G.PXmax=mob?3.5:6;
+  G.R=R;const mob=Math.min(innerWidth,innerHeight)<700;G.scale=Math.min(devicePixelRatio||1,mob?1.6:2);G.scaleBase=G.scale;G.PXmax=mob?4:8;
   inputInit();fillLM();menuBG();showMenu();requestAnimationFrame(frame)}
 const _updCam=updCam;updCam=function(dt){if(G.mode==='menu'){menuCam(dt);return}_updCam(dt)};
 window.addEventListener('load',()=>{demInit().then(init,e=>{console.warn(e);init()})});
@@ -1767,6 +1774,19 @@ const _finishShotP=finishShot;finishShot=function(){const a=G.anim,res=a&&a.res;
   G.penFrom={x:a.from.x,y:a.from.y,surf:G.lastPos&&G.lastPos.surf};const opts=penOptions(H,a.from,entry,fb);
   if(opts.length<2&&opts[0].k!=='replay'){return}// nothing to choose
   clearTimeout(toastT);$('toast').classList.remove('on');G.phase='pen';penShow(opts)};
+
+/* chip mode: inside ~60 yds off the green with a wedge, the meter maps to distance (full = 1.3x the shot), like the putt meter */
+function chipCandidate(){const b=G.ball,H=G.H;if(!H||!b||G.club===PUTTER)return false;if(b.surf===S_TEE||b.surf===S_GREEN||b.surf===S_SAND||b.surf===S_WATER)return false;return true}
+function chipOn(){return !!(G.chip&&G.club>=8&&G.club<PUTTER&&chipCandidate())}
+function chipEst(ci,q){const b=G.ball,t=curTarget();const dir=Math.atan2(t.y-b.y,t.x-b.x);const cc=clubCarry(ci,q,b.surf===S_GREEN?S_FW:b.surf,G.wind||{x:0,y:0},dir);return cc.carry+(cc.total-cc.carry)*.6}
+function chipPhys(ci,yds){let lo=.02,hi=1.12;if(chipEst(ci,hi)<yds)return hi;for(let k=0;k<16;k++){const m=(lo+hi)/2;if(chipEst(ci,m)<yds)lo=m;else hi=m}return (lo+hi)/2}
+function chipSetup(){G.chip=null;if(!chipCandidate()||!G.rec||G.rec.ci===PUTTER)return;const t=curTarget(),d=playsLike(t);if(!(d>2)||d>60)return;
+  G.chip={max:Math.max(12,Math.ceil(d*1.3/5)*5),d};
+  if(G.rec.ci>=8){G.rec.pwPhys=chipPhys(G.rec.ci,d);G.rec.pw=clamp(Math.round(d/G.chip.max*100)/100,.05,1.1)}}
+function chipMeterPw(){return G.rec&&G.rec.ci>=8?G.rec.pw:clamp(G.chip.d/G.chip.max,.05,1.1)}
+const _recommendC=recommend;recommend=function(){_recommendC.apply(this,arguments);try{chipSetup()}catch(e){G.chip=null}};
+const _executeShotC=executeShot;executeShot=function(inp){if(inp&&chipOn()&&Number.isFinite(inp.power)){inp=Object.assign({},inp);const yd=clamp(inp.power,0,1.15)*G.chip.max;inp.power=Math.max(.02,chipPhys(G.club,yd));inp.chipYds=yd}return _executeShotC(inp)};
+function chipPhysForRing(){if(!chipOn())return null;const mp=G.club===G.rec.ci?G.rec.pw:chipMeterPw();return chipPhys(G.club,mp*G.chip.max)}
 
 </script>
 </body>
