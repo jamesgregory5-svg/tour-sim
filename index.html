@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.8';
+const VERSION='v1.9';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -417,17 +417,17 @@ function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECI
   const th=S.thpx,tw=th*S.w*.94;const hv=R()*8-4;
   if(sp===0||sp===7){// pines: tall bare trunk, sparse layered branch tiers of needle pads with sky gaps between them
     const cb=sp===0?.5:.36;const tx=R.range(-5,5);trunk(g,bx,by,bx+tx,by-th*.98,8,2.5,'#7a5e48','#2b2119');
-    const hue=sp===0?96+hv:104+hv;const tiers=sp===0?7+Math.floor(R()*3):8+Math.floor(R()*3);
+    const hue=sp===0?96+hv:104+hv;const tiers=sp===0?9+Math.floor(R()*3):10+Math.floor(R()*3);
     const pad=(x,y,len,dir,droop,sc)=>{// one branch: limb + needle spray along it
       g.strokeStyle='#3a2b20';g.lineWidth=2.2*sc;g.beginPath();g.moveTo(x,y);g.quadraticCurveTo(x+dir*len*.5,y-4*sc,x+dir*len,y+droop);g.stroke();
-      const nn=Math.round(len*1.6);for(let k=0;k<nn;k++){const u=.15+.85*R(),px=x+dir*len*u,py=y-4*sc*u*(1-u)*2+droop*u*u+R.range(-5,3)*sc;
+      const nn=Math.round(len*2.1);for(let k=0;k<nn;k++){const u=.15+.85*R(),px=x+dir*len*u,py=y-4*sc*u*(1-u)*2+droop*u*u+R.range(-5,3)*sc;
         const lit=u>.4&&R()<.55?27:16;g.strokeStyle=hsl(hue+R.range(-6,6),26+R()*10,lit+R.range(-4,6),.9);g.lineWidth=1.1;
         for(let q=0;q<3;q++){const an=-Math.PI/2+R.range(-1.3,1.3);const l=R.range(4,9)*sc;g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.cos(an)*l,py+Math.sin(an)*l*.8);g.stroke()}}
       // sunlit top rim of the pad
       g.fillStyle=hsl(hue-4,30,33,.55);for(let k=0;k<len*.35;k++){const u=.3+.7*R();g.beginPath();g.ellipse(x+dir*len*u,y-5*sc+droop*u*u,R.range(1,2.4),R.range(.6,1.4),0,0,TAU);g.fill()}};
     for(let i=0;i<tiers;i++){const f=(i+R.range(-.25,.25))/tiers;const y=by-th*(cb+f*(1-cb)*.95);const x=bx+tx*(by-y)/th;
       const env=sp===0?(.45+.55*Math.sin(Math.PI*Math.min(1,.15+f*1.05))):(1-f*.7);const len=tw*.5*env*R.range(.75,1.1),sc=1.1-f*.35;
-      if(R()<.85)pad(x,y,len,-1,R.range(0,10),sc);if(R()<.85)pad(x,y+R.range(-8,8),len*R.range(.7,1),1,R.range(0,10),sc)}
+      if(R()<.95)pad(x,y,len,-1,R.range(0,10),sc);if(R()<.95)pad(x,y+R.range(-8,8),len*R.range(.7,1),1,R.range(0,10),sc)}
     // crown top tuft
     for(let k=0;k<3;k++)pad(bx+tx,by-th*.95+k*6,tw*.12,k%2?1:-1,2,.8)}
   else if(sp===1||sp===2){// oak / maple: visible trunk + limbs, broad crown of many clumps
@@ -642,7 +642,7 @@ function buildHole0(course,geo,hi,teeIdx,opts){
     if(woodMask[k]){if(TR()<.92*clamp(dens*1.6+.08,0,1))addT(jx,jy,TR.range(.8,1.25),kindOf());continue}
     // filler trees only well outside the corridor (never between tee, fairway, water and green)
     if((SU[k]===1||SU[k]===8)&&TR()<.03*dens&&farOut(jx,jy))addT(jx,jy,TR.range(.8,1.2)*(dens<.1?.6:1),kindOf())}
-  for(let i=0;i<(geo.t||[]).length;i+=2){if(hash2(i,77)>clamp(dens*2+(dens<.1?.08:.3),0,1))continue;const p=tf([geo.t[i],geo.t[i+1]]);if(p[0]>X0&&p[0]<X1&&p[1]>Y0&&p[1]<Y1)addT(p[0],p[1],TR.range(.9,1.2)*(dens<.1?.6:1),kindOf())}
+  for(let i=0;i<(geo.t||[]).length;i+=2){if(hash2(i,77)>clamp(dens*2+(dens<.1?.08:.3),0,1))continue;const p=tf([geo.t[i],geo.t[i+1]]);if(p[0]>X0&&p[0]<X1&&p[1]>Y0&&p[1]<Y1&&![2,3,4,5,6].includes(surfAt(p[0],p[1]))&&segD(p[0],p[1],hl)>(dens<.3?12:5))addT(p[0],p[1],TR.range(.9,1.2)*(dens<.1?.6:1),kindOf())}
   if(course.id==='augusta'){for(let n=0;n<140;n++){const a=TR()*TAU,d=TR.range(16,34);const x=gcx+Math.cos(a)*d*1.2,y=gcy+Math.sin(a)*d;const k=surfIdx(x,y);if(k>=0&&(SU[k]===1||SU[k]===8))addT(x,y,1,TR()<.8?6:5)}}
   // keep the tee camera clear: nothing within ~16 yd of the tee or inside the forward view cone
   for(let i=trees.length-1;i>=0;i--){const t=trees[i],r=Math.hypot(t.x,t.y);if(r<16+t.w*.5||(t.y>-12&&t.y<70&&Math.abs(t.x)<10+t.y*.32+t.w*.5))trees.splice(i,1)}
@@ -768,7 +768,7 @@ const M4={
 };
 const GLSL_COMMON=`
 uniform vec3 uSun;uniform vec3 uSunCol;uniform vec3 uSkyTop;uniform vec3 uSkyHor;uniform vec3 uFogCol;uniform float uFogK;uniform vec3 uEye;uniform float uTime;uniform float uMist;uniform float uMistZ;uniform float uSeaZ;
-vec3 skyCol(vec3 d){float h=max(d.z,0.);vec3 c=mix(uSkyHor,uSkyTop,pow(h,.55));float s=max(dot(d,uSun),0.);c+=uSunCol*(pow(s,8.)*.25+pow(s,64.)*.35+pow(s,700.)*4.+pow(s,3.)*.2*(1.-uSun.z));return c;}
+vec3 skyCol(vec3 d){float h=max(d.z,0.);vec3 c=mix(uSkyHor,uSkyTop,pow(h,.4));float s=max(dot(d,uSun),0.);c+=uSunCol*(pow(s,8.)*.25+pow(s,64.)*.35+pow(s,700.)*4.+pow(s,3.)*.2*(1.-uSun.z));return c;}
 vec3 tm(vec3 c){c*=1.05;vec3 a=c*(2.51*c+.03),b=c*(2.43*c+.59)+.14;c=clamp(a/b,0.,1.);float l=dot(c,vec3(.299,.587,.114));return mix(vec3(l),c,.9);}
 vec3 fogit(vec3 c,vec3 p){float d=length(p-uEye);float f=1.-exp(-d*d*uFogK);vec3 v=normalize(p-uEye);float s=pow(max(dot(v,uSun),0.),6.);vec3 fc=mix(uFogCol,uSunCol*.9+uFogCol*.4,s*.6);c=mix(c,fc,clamp(f,0.,.8));if(uMist>0.){float hm=1.-smoothstep(-1.5,1.8,p.z-uMistZ);float dm=smoothstep(35.,240.,d);float nm=.75+.5*sin(p.x*.05+uTime*.05)*sin(p.y*.043-uTime*.03);c=mix(c,uFogCol*1.06,clamp(uMist*hm*dm*nm*.11,0.,.09));}return c;}
 `;
@@ -1231,7 +1231,7 @@ function fillLM(){const l=G.lm;const st=G.lmStage===undefined?2:G.lmStage;const 
     ['Carry',has?(st>=1?yd(l.carry):P):D],['Total',has?(st>=2?yd(l.total):P):D],['Side',has?(st>=2?(Math.abs(l.side)<.5?'0 yds':(l.side>0?'R ':'L ')+Math.abs(l.side).toFixed(0)+' yds'):P):D],['Apex',has?(st>=1?Math.round(l.apex*3)+' ft':P):D]];
   $('lmRows').innerHTML=rows.map(r=>`<div class="r"><span>${r[0]}</span><b>${r[1]}</b></div>`).join('');$('lmShape').textContent=has&&st>=1&&l.shape?who+l.shape+(l.name?' · '+l.name:''):has?who+(l.name||''):'—'}
 function updHUD(){const H=G.H;if(!H)return;const b=G.ball;const isR=G.mode==='round';
-  $('bHn').textContent=isR?H.hi+1:G.modeShort||'—';$('bName').textContent=isR?(H.name||H.course.name):(G.modeTitle||'');$('bPar').textContent=isR?`PAR ${H.par} · ${H.yards} YDS · ${G.strokes?('SHOT '+(G.strokes+1)):'TEE'}`:(G.modeSub||'');
+  $('bHn').textContent=isR?H.hi+1:G.modeShort||'—';$('bName').textContent=isR?H.course.name:(G.modeTitle||'');$('bPar').textContent=isR?`${H.name?String(H.name).toUpperCase()+' · ':''}PAR ${H.par} · ${H.yards} YDS · ${G.strokes?('SHOT '+(G.strokes+1)):'TEE'}`:(G.modeSub||'');
   $('bSc').textContent=isR?fmtPar(scoreToPar()):(G.modeScore||'—');
   const ci=G.club;$('sClub').textContent=CN[ci];const d=distYd(b,G.target||H.cup);const onG=b.surf===S_GREEN||ci===PUTTER;
   const tg=G.target||H.cup,ev=elevTo(tg),pl=Math.round(d+ev);
@@ -1715,13 +1715,58 @@ const _finishRoundC=finishRound;finishRound=function(){const r=G.round?JSON.pars
 
 /* ---------- time of day (Morning / Midday / Sunset): lighting only, physics untouched ---------- */
 const TOD={
-  morning:{n:'Morning',sun:[-.55,-.8,.22],sunCol:[1.6,1.36,1.06],skyTop:[.22,.42,.78],skyHor:[.88,.85,.80],fog:[.82,.84,.86],far:[.15,.22,.17],fogMul:.55,mist:1},
+  morning:{n:'Morning',sun:[-.72,.62,.2],sunCol:[1.6,1.36,1.06],skyTop:[.2,.4,.78],skyHor:[.80,.84,.88],fog:[.82,.84,.86],far:[.15,.22,.17],fogMul:.55,mist:1},
   midday:{n:'Midday',sun:[.44,-.6,.47],sunCol:[1.0,.88,.70],skyTop:[.26,.47,.80],skyHor:[.68,.77,.88],fog:[.70,.78,.86],far:[.17,.27,.14],fogMul:.3,mist:0},
   sunset:{n:'Sunset',sun:[.85,.45,.16],sunCol:[2.6,1.3,.5],skyTop:[.22,.32,.6],skyHor:[1.0,.55,.32],fog:[.9,.6,.42],far:[.13,.17,.10],fogMul:.8}};
 function todKey(){const k=store('ts.tod');return TOD[k]?k:'midday'}
 function applyTOD(k){const t=TOD[k]||TOD.midday;const l=Math.hypot(...t.sun);for(let i=0;i<3;i++)SUN_FRAME[i]=t.sun[i]/l;
   LIGHT.sunCol=t.sunCol.slice();LIGHT.skyTop=t.skyTop.slice();LIGHT.skyHor=t.skyHor.slice();LIGHT.fog=t.fog.slice();LIGHT.far=t.far.slice();LIGHT.fogMul=t.fogMul;LIGHT.mist=t.mist||0;G.tod=k}
 const _setHoleT=setHole;setHole=function(H,f){applyTOD(G.mode==='round'&&G.round&&G.round.tod?G.round.tod:todKey());return _setHoleT(H,f)};
+
+/* water hazard options: after a ball comes to rest in a penalty area, pick how to take relief (+1 stroke in every case) */
+const PEN_DZ={'augusta:11':1,'augusta:14':1,'augusta:15':1};// holes with a designated drop zone (placed short of the hazard on the play line)
+function penValid(H,x,y){if(!Number.isFinite(x)||!Number.isFinite(y))return false;if(x<=H.X0+1||x>=H.X1-1||y<=H.Y0+1||y>=H.Y1-1)return false;const s=H.surfAt(x,y);return s!==S_WATER&&s!==S_OB}
+function penClear(H,x,y,r){for(let a=0;a<8;a++){const s=H.surfAt(x+Math.cos(a/8*TAU)*r,y+Math.sin(a/8*TAU)*r);if(s===S_WATER||s===S_OB)return false}return penValid(H,x,y)}
+function penOptions(H,from,entry,fallback){const cup=H.cup,o=[];
+  // 1 stroke and distance: replay from the previous spot
+  if(penValid(H,from.x,from.y))o.push({k:'replay',t:'Replay from previous spot',s:'Stroke and distance',x:from.x,y:from.y});
+  // 2 back on the line: keep the point of entry between the hole and the drop
+  {let dx=entry.x-cup.x,dy=entry.y-cup.y,L=Math.hypot(dx,dy);if(L>.5){dx/=L;dy/=L;for(let s=2;s<160;s+=1){const x=entry.x+dx*s,y=entry.y+dy*s;if(penClear(H,x,y,1.2)&&H.surfAt(x,y)!==S_SAND){o.push({k:'line',t:'Drop on the line',s:'Back from the point of entry',x,y});break}}}}
+  // 3 drop zone (where the hole has one) or a lateral drop near the point of entry
+  if(PEN_DZ[H.course.id+':'+H.hi]){let best=null;const ln=H.line;for(let s=Math.max(0,H.yards-260);s<H.yards;s+=2){const p=pointAt(ln,s);if(!penClear(H,p[0],p[1],5))continue;const sf=H.surfAt(p[0],p[1]);if(sf!==S_FW&&sf!==S_ROUGH)continue;
+      // must be short of the hazard (no water between here and the green is fine: the hazard is between the drop zone and the green)
+      if(Math.hypot(p[0]-cup.x,p[1]-cup.y)<Math.hypot(entry.x-cup.x,entry.y-cup.y)-2)continue;best={x:p[0],y:p[1]}}
+    if(best)o.push({k:'dz',t:'Drop zone',s:'Designated drop area',x:best.x,y:best.y})}
+  if(!o.some(q=>q.k==='dz')&&penValid(H,fallback.x,fallback.y))o.push({k:'lateral',t:'Drop near point of entry',s:'Within two club-lengths, no nearer the hole',x:fallback.x,y:fallback.y});
+  if(!o.length)o.push({k:'replay',t:'Replay from previous spot',s:'Stroke and distance',x:Number.isFinite(from.x)?from.x:0,y:Number.isFinite(from.y)?from.y:0});
+  return o}
+let penTimer=0;
+function penInit(){if($('pen'))return;const st=document.createElement('style');st.textContent=`#pen{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;min-width:300px;max-width:92vw;background:rgba(12,18,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:14px 14px 10px;color:#fff;font-family:inherit;display:none;box-shadow:0 10px 40px rgba(0,0,0,.45)}
+#pen.on{display:block}#pen .ph{font-weight:800;letter-spacing:.14em;font-size:13px;color:#7fd3ff;margin-bottom:2px}#pen .ps{font-size:12px;opacity:.75;margin-bottom:10px}
+#pen button{display:flex;align-items:center;gap:10px;width:100%;margin:6px 0;padding:10px 12px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;font:inherit;text-align:left;cursor:pointer;touch-action:manipulation}
+#pen button:hover,#pen button:focus{background:rgba(127,211,255,.18);outline:none;border-color:#7fd3ff}#pen .pk{flex:none;width:24px;height:24px;border-radius:6px;background:#7fd3ff;color:#0c1218;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px}
+#pen .pt{font-weight:700;font-size:14px}#pen .pd{font-size:11px;opacity:.7}#pen .pa{font-size:11px;opacity:.55;text-align:right;margin-top:4px}`;document.head.appendChild(st);
+  const d=document.createElement('div');d.id='pen';document.body.appendChild(d);
+  document.addEventListener('keydown',e=>{if(G.phase!=='pen')return;const n=+e.key;if(n>=1&&n<=G.penOpts.length){e.preventDefault();e.stopPropagation();penPick(n-1)}},true)}
+function penShow(opts){penInit();G.penOpts=opts;const H=G.H,d=$('pen');
+  d.innerHTML='<div class="ph">PENALTY AREA</div><div class="ps">'+(G.round&&G.round.players&&G.round.players.length>1?(G.round.players[G.cur].name+' · '):'')+'+1 stroke · choose your relief</div>'+opts.map((q,i)=>'<button data-i="'+i+'"><span class="pk">'+(i+1)+'</span><span><div class="pt">'+q.t+'</div><div class="pd">'+q.s+' · '+Math.round(Math.hypot(q.x-H.cup.x,q.y-H.cup.y))+' yds to pin</div></span></button>').join('')+'<div class="pa" id="penA"></div>';
+  d.querySelectorAll('button').forEach(b=>{b.onclick=e=>{e.stopPropagation();penPick(+b.dataset.i)};b.ontouchend=e=>{e.preventDefault();e.stopPropagation();penPick(+b.dataset.i)}});
+  d.onpointerdown=e=>e.stopPropagation();d.onmousedown=e=>e.stopPropagation();
+  d.classList.add('on');const def=opts.length-1;let left=15;$('penA').textContent='Auto: option '+(def+1)+' in '+left+'s';clearInterval(penTimer);
+  penTimer=setInterval(()=>{if(G.phase!=='pen'){clearInterval(penTimer);return}left--;const a=$('penA');if(a)a.textContent='Auto: option '+(def+1)+' in '+left+'s';if(left<=0){clearInterval(penTimer);penPick(def)}},1000);
+  setTimeout(()=>{const b=d.querySelector('button');if(b&&G.phase==='pen')try{b.focus({preventScroll:true})}catch(e){}},50)}
+function penPick(i){if(G.phase!=='pen')return;const q=G.penOpts[i];if(!q)return;clearInterval(penTimer);const H=G.H,b=G.ball;
+  let x=q.x,y=q.y;if(!penValid(H,x,y)){const lp=G.penFrom;x=lp.x;y=lp.y}if(!Number.isFinite(x)||!Number.isFinite(y)){x=0;y=0}
+  b.x=x;b.y=y;b.surf=H.surfAt(x,y);if(q.k==='replay'&&G.penFrom.surf===S_TEE)b.surf=S_TEE;
+  G.penLast={k:q.k,x,y};$('pen').classList.remove('on');toast('PENALTY',q.t+' · +1',1400);
+  G.phase='rest';G.restT=99}
+const _finishShotP=finishShot;finishShot=function(){const a=G.anim,res=a&&a.res;const wet=res&&res.kind==='water'&&G.mode==='round';
+  _finishShotP();if(!wet||G.phase==='holed')return;const H=G.H;
+  const land=a.land||{x:res.x,y:res.y};const fb={x:G.ball.x,y:G.ball.y};// the default drop the base rules picked (last land before the water)
+  const entry=penValid(H,fb.x,fb.y)?fb:{x:Number.isFinite(land.x)?land.x:a.from.x,y:Number.isFinite(land.y)?land.y:a.from.y};
+  G.penFrom={x:a.from.x,y:a.from.y,surf:G.lastPos&&G.lastPos.surf};const opts=penOptions(H,a.from,entry,fb);
+  if(opts.length<2&&opts[0].k!=='replay'){return}// nothing to choose
+  clearTimeout(toastT);$('toast').classList.remove('on');G.phase='pen';penShow(opts)};
 
 </script>
 </body>
