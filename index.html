@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.10';
+const VERSION='v1.11';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -401,8 +401,9 @@ const SPECIES=[
 const ATL={cols:8,rows:5,cw:256,ch:512};
 for(const S of SPECIES){S.thpx=Math.min(ATL.ch-8,(ATL.cw-10)/S.w);S.qk=(ATL.ch)/S.thpx;}// quad height = tree height * qk// cell = species*4+variant -> col=(cell%8),row=floor(cell/8)
 function paintTreeAtlas(){
-  const c=document.createElement('canvas');c.width=ATL.cols*ATL.cw;c.height=ATL.rows*ATL.ch;const g=c.getContext('2d');
-  for(let sp=0;sp<SPECIES.length;sp++)for(let v=0;v<4;v++){const cell=sp*4+v,cx=(cell%8)*ATL.cw,cy=Math.floor(cell/8)*ATL.ch;g.save();g.beginPath();g.rect(cx,cy,ATL.cw,ATL.ch);g.clip();g.translate(cx,cy);paintTree(g,sp,v,RNG('tree'+sp+'_'+v));g.restore()}
+  const TS=Math.min(innerWidth,innerHeight)<700?1:1.5;ATL.ts=TS;// desktop: 1.5x atlas resolution for sharper foliage
+  const c=document.createElement('canvas');c.width=ATL.cols*ATL.cw*TS;c.height=ATL.rows*ATL.ch*TS;const g=c.getContext('2d');
+  for(let sp=0;sp<SPECIES.length;sp++)for(let v=0;v<4;v++){const cell=sp*4+v,cx=(cell%8)*ATL.cw,cy=Math.floor(cell/8)*ATL.ch;g.save();g.scale(TS,TS);g.beginPath();g.rect(cx,cy,ATL.cw,ATL.ch);g.clip();g.translate(cx,cy);paintTree(g,sp,v,RNG('tree'+sp+'_'+v));g.restore()}
   return c}
 function hsl(h,s,l,a){return`hsla(${h},${s}%,${l}%,${a===undefined?1:a})`}
 function clump(g,x,y,r,hue,sat,lit,R,dots){// one foliage clump: dark underside, sunlit top, leaf speckle
@@ -439,7 +440,14 @@ function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECI
   else if(sp===3){// Monterey cypress: leaning trunk, flat wind-sculpted layered canopy
     const lean=(v%2?1:-1)*R.range(.15,.35);const tx=bx+lean*tw*.6,ty=by-th*.55;trunk(g,bx,by,tx,ty,13,7,'#5a4636','#271d15');
     g.strokeStyle='#3b2d22';g.lineCap='round';for(let i=0;i<4;i++){g.lineWidth=R.range(3,5);g.beginPath();g.moveTo(tx,ty);g.lineTo(tx+R.range(-.45,.45)*tw,ty-R.range(10,60));g.stroke()}
-    const hue=110+hv;for(let L=0;L<3;L++){const y=by-th*(.58+L*.15),w=tw*(.48-L*.1);for(let i=0;i<10;i++){const x=tx+R.range(-1,1)*w+lean*L*20;clump(g,x,y+R.range(-8,8),R.range(16,24),hue,22+L*4,13+L*6,R)}}}
+    const hue=108+hv,wind=lean>0?1:-1,nL=3+(v>>1);// flat-topped, wind-swept pads stacked downwind, lit edges on top, dark undersides
+    for(let L=0;L<nL;L++){const f=L/(nL-1),y=by-th*(.5+f*.36),w=tw*(.42-f*.15)*R.range(.88,1.05),cx=tx+wind*tw*(.02+f*.08)+R.range(-6,6);
+      g.strokeStyle='#3b2d22';g.lineWidth=R.range(2.5,4.5);g.beginPath();g.moveTo(tx,ty);g.quadraticCurveTo(tx+(cx-tx)*.3,y+20,cx,y+4);g.stroke();
+      g.save();g.translate(cx,y);g.scale(1,.46);
+      g.fillStyle=hsl(hue+6,18,9,.9);g.beginPath();g.ellipse(0,14,w*1.02,34,0,0,TAU);g.fill();
+      for(let i=0;i<18;i++){const x=R.range(-1,1)*w*.95,yy=R.range(-14,16);clump(g,x,yy,R.range(14,22),hue,20+L*2,18+f*8,R)}
+      for(let i=0;i<11;i++){const x=R.range(-.95,.95)*w*.92,yy=-22+Math.abs(x)/w*12+R.range(-4,3);clump(g,x,yy,R.range(9,15),hue-4,26,30+f*6,R,10)}
+      g.restore()}}
   else if(sp===4){// palm (sabal / royal): curved tapering ringed trunk, dead-frond boot, globe of arching fronds
     const lean=R.range(-28,28),top={x:bx+lean,y:by-th*.8},ctl={x:bx+lean*.15+R.range(-10,10),y:by-th*.45};const royal=v>=2;
     const at=t=>({x:(1-t)*(1-t)*bx+2*(1-t)*t*ctl.x+t*t*top.x,y:(1-t)*(1-t)*by+2*(1-t)*t*ctl.y+t*t*top.y});
@@ -605,7 +613,7 @@ function buildHole0(course,geo,hi,teeIdx,opts){
     const d=q.getImageData(0,0,W*K,H*K).data,m=new Float32Array(W*H);for(let j=0;j<H;j++)for(let i=0;i<W;i++){let a=0;const r0=(H-1-j)*K;for(let v=0;v<K;v++)for(let u=0;u<K;u++)a+=d[((r0+v)*W*K+i*K+u)*4];m[j*W+i]=a/(K*K*255)}
     const t=new Float32Array(W*H);for(let j=0;j<H;j++)for(let i=0;i<W;i++){let a=0,n=0;for(let v=-1;v<=1;v++)for(let u=-1;u<=1;u++){const ii=i+u,jj=j+v;if(ii<0||jj<0||ii>=W||jj>=H)continue;a+=m[jj*W+ii]*(u||v?1:2);n+=u||v?1:2}t[j*W+i]=a/n}return t};
   const mS=polyCov(F.bk||[]);
-  const mG=blur(s=>s===5||s===4,3),mW=(F.wa&&F.wa.length)?(()=>{const c=polyCov(F.wa),near=boxF(c,3),o=new Float32Array(W*H);for(let k=0;k<o.length;k++)o[k]=near[k]>0.001?c[k]:(SU[k]===7?1:0);return boxF(o,2)})():blur(7,2),mT=blur(3,2);
+  const mG=blur(s=>s===5||s===4,3),mW=(F.wa&&F.wa.length)?(()=>{const c=polyCov(F.wa),near=boxF(c,3),o=new Float32Array(W*H);for(let k=0;k<o.length;k++)o[k]=near[k]>0.001?c[k]:(SU[k]===7?1:0);return boxF(o,2)})():blur(7,2),mT=blur(3,2);const mWB=boxF(mW,4);
   const und=st.und*(par===3?.8:1)*(DEM_OK?.55:1);const gBase=fbm2(gcx,gcy,seedN)*und+.35+dGC;
   const cellM=(m,i,j)=>{i=clamp(i,0,W-1);j=clamp(j,0,H-1);return m[j*W+i]};
   // famous deep pot bunkers (real OSM bunker polygons, deepened): Pine Valley 10 "Devil's Asshole", short-right of the green
@@ -616,8 +624,15 @@ function buildHole0(course,geo,hi,teeIdx,opts){
     const a=(cellM(mG,i,j)+cellM(mG,i-1,j)+cellM(mG,i,j-1)+cellM(mG,i-1,j-1))/4,sd=(cellM(mS,i,j)+cellM(mS,i-1,j)+cellM(mS,i,j-1)+cellM(mS,i-1,j-1))/4,
       wa=(cellM(mW,i,j)+cellM(mW,i-1,j)+cellM(mW,i,j-1)+cellM(mW,i-1,j-1))/4,te=(cellM(mT,i,j)+cellM(mT,i-1,j)+cellM(mT,i,j-1)+cellM(mT,i-1,j-1))/4;
     const gw=smooth(clamp(a*1.6-.3,0,1));const nearG=Math.hypot(x-gcx,y-gcy)<grad+12;
-    const dl=segD(x,y,hl);const base=dz(x,y);let h=base+fbm2(x,y,seedN)*und*(.45+.55*smooth(clamp((dl-15)/45,0,1)))+.07*vnoise(x/7+seedN,y/7)+.035*vnoise(x/3.1,y/3.1-seedN);h=nearG?h*(1-gw)+(gBase+greenH(x,y))*gw:h+gw*.25;h-=sd*.75;h-=wa*.7;h+=te*.18;if(pews){const pw=pews.at(x,y);if(pw>0)h+=smooth(pw)*.95}if(pot){const pd=Math.hypot(x-pot.x,y-pot.y);if(pd<pot.r+2)h-=pot.depth*smooth(clamp((pot.r+2-pd)/2.4,0,1))}{const r=Math.hypot(x,y);if(r<10){const w=smooth(clamp((10-r)/4,0,1));h=lerp(h,.22,w)}}
+    const dl=segD(x,y,hl);const base=dz(x,y);let h=base+fbm2(x,y,seedN)*und*(.45+.55*smooth(clamp((dl-15)/45,0,1)))+.07*vnoise(x/7+seedN,y/7)+.035*vnoise(x/3.1,y/3.1-seedN);h=nearG?h*(1-gw)+(gBase+greenH(x,y))*gw:h+gw*.25;h-=sd*.75;h-=wa*.7+Math.max(0,cellM(mWB,i,j)-wa*.5)*.55;h+=te*.18;if(pews){const pw=pews.at(x,y);if(pw>0)h+=smooth(pw)*.95}if(pot){const pd=Math.hypot(x-pot.x,y-pot.y);if(pd<pot.r+2)h-=pot.depth*smooth(clamp((pot.r+2-pd)/2.4,0,1))}{const r=Math.hypot(x,y);if(r<10){const w=smooth(clamp((10-r)/4,0,1));h=lerp(h,.22,w)}}
     HT[j*NW+i]=h}
+  // rocky coasts (Cypress, Pebble, Pacific Dunes): the coarse DEM smears the bluffs into ramps, so keep the inland bluff height to the mapped shoreline and drop it as a cliff face
+  if({pebble:1,cypress:1,pacificdunes:1}[course.id]&&sea.length){const sc=polyCov(sea),n1=boxF(sc,1),n8=boxF(sc,8);const zs=[];for(let j=0;j<NH;j+=2)for(let i=0;i<NW;i+=2)if(cellM(sc,i,j)>.9)zs.push(HT[j*NW+i]);
+    if(zs.length>20){zs.sort((a,b)=>a-b);const sz=zs[zs.length>>1];const H2=Float32Array.from(HT);
+      for(let j=0;j<NH;j++)for(let i=0;i<NW;i++){const b8=cellM(n8,i,j);if(b8<=0.002)continue;const k=j*NW+i,cs=cellM(sc,i,j);
+        if(cs<.5){let hp=H2[k];for(let v=-9;v<=9;v+=3)for(let u=-9;u<=9;u+=3){const ii=clamp(i+u,0,NW-1),jj=clamp(j+v,0,NH-1);if(cellM(sc,ii,jj)<.3)hp=Math.max(hp,H2[jj*NW+ii])}
+          const lift=hp-sz>3?smooth(clamp(b8*4,0,1)):0;let h=lerp(H2[k],Math.max(H2[k],hp-.4),lift*.85);const e=cellM(n1,i,j);h=lerp(h,sz-.8,smooth(clamp((e-.05)/.4,0,1)));HT[k]=h}
+        else HT[k]=Math.min(H2[k],sz-.8)}}}
   const hAt=(x,y)=>{const fx=clamp(x-X0,0,W-.001),fy=clamp(y-Y0,0,H-.001),i=Math.floor(fx),j=Math.floor(fy),u=fx-i,v=fy-j,k=j*NW+i;
     return(HT[k]*(1-u)+HT[k+1]*u)*(1-v)+(HT[k+NW]*(1-u)+HT[k+NW+1]*u)*v};
   const slopeAt=(x,y)=>{if(Math.hypot(x-gcx,y-gcy)<grad+3){const k=surfAt(x,y);if(k===5||k===4){const q=greenG(x,y);return{x:-GA*q[0],y:-GA*q[1]}}}
@@ -719,9 +734,10 @@ function paintHole(H,PX){
   const rocky={pebble:1,cypress:1,pacificdunes:1}[H.course.id];
   if(H.sea.length){g.lineJoin='round';
     if(rocky){g.strokeStyle='#5d574d';g.lineWidth=5.5;for(const P of H.sea){path(P);g.stroke()}g.strokeStyle='#7b7468';g.lineWidth=3;for(const P of H.sea){path(P);g.stroke()}
-      const RR=RNG('rk'+H.course.id+H.hi);for(const P of H.sea)for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);for(let t=0;t<L;t+=.7){const f=t/L,x=a[0]+(b[0]-a[0])*f+RR.range(-2.4,2.4),y=a[1]+(b[1]-a[1])*f+RR.range(-2.4,2.4);
-        const v=RR.range(.55,1.15);g.fillStyle=`rgb(${110*v|0},${104*v|0},${92*v|0})`;g.beginPath();g.ellipse(x-X0,Y1-y,RR.range(.35,1.1),RR.range(.3,.8),RR()*3,0,TAU);g.fill();g.fillStyle='rgba(20,18,14,.35)';g.beginPath();g.ellipse(x-X0+.15,Y1-y+.2,RR.range(.2,.5),RR.range(.15,.35),0,0,TAU);g.fill()}}}
+      const RR=RNG('rk'+H.course.id+H.hi);for(const P of H.sea)for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);for(let t=0;t<L;t+=1.6){const f=t/L,x=a[0]+(b[0]-a[0])*f+RR.range(-2.2,2.2),y=a[1]+(b[1]-a[1])*f+RR.range(-2.2,2.2);
+        const v=RR.range(.7,1.2),rx=RR.range(.7,1.9),ry=rx*RR.range(.55,.85),ro=RR()*3,X=x-X0,Y=Y1-y;g.fillStyle='rgba(30,26,22,.45)';g.beginPath();g.ellipse(X+.3,Y+.35,rx*1.05,ry*1.05,ro,0,TAU);g.fill();const gr=g.createRadialGradient(X-rx*.35,Y-ry*.4,rx*.1,X,Y,rx);gr.addColorStop(0,`rgb(${168*v|0},${158*v|0},${142*v|0})`);gr.addColorStop(1,`rgb(${88*v|0},${80*v|0},${70*v|0})`);g.fillStyle=gr;g.beginPath();g.ellipse(X,Y,rx,ry,ro,0,TAU);g.fill()}}}
     else{g.strokeStyle='#d6c8a2';g.lineWidth=8;for(const P of H.sea){path(P);g.stroke()}g.strokeStyle='#b3a57f';g.lineWidth=3.2;for(const P of H.sea){path(P);g.stroke()}}}
+  g.strokeStyle='rgba(66,70,40,.28)';g.lineWidth=6.;for(const P of(F.wa||[])){path(P);g.stroke()}g.strokeStyle='rgba(70,60,38,.5)';g.lineWidth=3.;for(const P of(F.wa||[])){path(P);g.stroke()}
   g.strokeStyle='rgba(58,52,34,.3)';g.lineWidth=1.;for(const P of(F.wa||[])){path(P);g.stroke()}
   // water
   g.fillStyle='#24525c';for(const P of(F.wa||[]).concat(H.sea)){path(P);g.fill()}
@@ -735,12 +751,15 @@ function paintHole(H,PX){
     if(s===9){g.fillStyle=R()<.5?'rgba(80,90,40,.7)':'rgba(140,120,80,.5)';g.beginPath();g.arc(x*PX,y*PX,PX*R.range(.3,.9),0,TAU);g.fill()}
     else if(s===8||s===0){g.fillStyle=R()<.5?'rgba(40,60,25,.35)':'rgba(150,150,90,.25)';g.beginPath();g.arc(x*PX,y*PX,PX*R.range(.4,1.2),0,TAU);g.fill()}}
   // tree shadows (sun direction)
-  const SHA=(.42+.22*Math.max(0,Math.min(1,(.38-SUN_FRAME[2])/.18))).toFixed(3);const sz=Math.max(SUN_FRAME[2],.36),sx=-SUN_FRAME[0]/sz,sy=-SUN_FRAME[1]/sz;
+  // soft, capped tree shadows: one layer so overlapping crowns never stack darker than a single shadow, tinted by skylight so shaded turf stays green
+  const SHA=.30+.10*Math.max(0,Math.min(1,(.38-SUN_FRAME[2])/.18));const sz=Math.max(SUN_FRAME[2],.36),sx=-SUN_FRAME[0]/sz,sy=-SUN_FRAME[1]/sz;
+  {const cv0=g.canvas,sc=document.createElement('canvas');sc.width=cv0.width;sc.height=cv0.height;const q=sc.getContext('2d');
   for(const t of H.trees){const ch=t.h*(t.cb+(1-t.cb)*.5),rx=t.w*.5,ox=sx*ch,oy=sy*ch;const cx=(t.x+ox-X0)*PX,cy=(Y1-(t.y+oy))*PX;
-    const r=Math.max(rx,.6)*PX;const gr=g.createRadialGradient(cx,cy,r*.2,cx,cy,r*1.15);gr.addColorStop(0,'rgba(8,22,4,'+SHA+')');gr.addColorStop(1,'rgba(8,22,4,0)');g.fillStyle=gr;
-    g.beginPath();g.ellipse(cx,cy,r*1.15,r*1.15*(t.sp===0||t.sp===7?1.2:1),Math.atan2(-oy,ox),0,TAU);g.fill();
-    // contact AO at the base
-    const bx=(t.x-X0)*PX,by=(Y1-t.y)*PX,br=Math.max(.8,rx*.35)*PX;const g2=g.createRadialGradient(bx,by,0,bx,by,br);g2.addColorStop(0,'rgba(10,18,5,.5)');g2.addColorStop(1,'rgba(10,18,5,0)');g.fillStyle=g2;g.beginPath();g.arc(bx,by,br,0,TAU);g.fill()}
+    const r=Math.max(rx,.6)*PX;const gr=q.createRadialGradient(cx,cy,r*.1,cx,cy,r*1.2);gr.addColorStop(0,'rgba(0,0,0,1)');gr.addColorStop(.55,'rgba(0,0,0,.85)');gr.addColorStop(1,'rgba(0,0,0,0)');q.fillStyle=gr;
+    q.beginPath();q.ellipse(cx,cy,r*1.2,r*1.2*(t.sp===0||t.sp===7?1.2:1),Math.atan2(-oy,ox),0,TAU);q.fill();
+    const bx=(t.x-X0)*PX,by=(Y1-t.y)*PX,br=Math.max(.8,rx*.35)*PX;const g2=q.createRadialGradient(bx,by,0,bx,by,br);g2.addColorStop(0,'rgba(0,0,0,1)');g2.addColorStop(1,'rgba(0,0,0,0)');q.fillStyle=g2;q.beginPath();q.arc(bx,by,br,0,TAU);q.fill()}
+  q.globalCompositeOperation='source-in';q.fillStyle='rgb(16,40,36)';q.fillRect(0,0,sc.width,sc.height);
+  g.save();g.setTransform(1,0,0,1,0,0);g.globalAlpha=SHA;g.drawImage(sc,0,0);g.restore()}
   // mask: R water, G green, B sand, A fairway
   // anti-aliased mask at MS px/yd from the vector shapes (raster fallback for procedural cells)
   const MS=3,mw=W*MS,mh=Hh*MS,md=new Uint8Array(mw*mh*4);
@@ -815,14 +834,22 @@ void main(){
   c*=mix(1.,.9+.2*nz.g,.7)*mix(1.,.93+.14*nz2.r,grass)*mix(1.,.9+.2*nz3.g,.7*w3)*mix(1.,.8+.4*nz4.b,grass*w4*.85)*mix(1.,.76+.48*nz5.a,grass*w5*.75);
   {float w6=(1.-smoothstep(.2,.55,fp*31.))*(1.-smoothstep(6.,40.,dE));float bl6=texture(uNoise,vP.xy*vec2(31.,23.)+.71).r*.6+texture(uNoise,vP.xy*vec2(61.,47.)+.13).g*.4;c*=mix(1.,.7+.6*bl6,grass*w6*.7);}
   c=pow(c,vec3(2.2));
+  float rkG=0.;{vec3 N0=normalize(vN);float sl0=length(N0.xy);float rk=uFoam*smoothstep(.45,.72,sl0)*(1.-smoothstep(uSeaZ+30.,uSeaZ+45.,vP.z))*(1.-smoothstep(.3,.5,m.r));
+    if(rk>0.){float st=texture(uNoise,vec2((vP.x+vP.y)*.045,vP.z*.22)).r*.45+texture(uNoise,vP.xy*.13+vec2(0.,vP.z*.08)).g*.35+nz4.b*.2;vec3 rc=mix(vec3(.30,.27,.23),vec3(.52,.47,.40),smoothstep(.25,.8,st));rc*=.9+.2*nz3.r;c=mix(c,pow(rc,vec3(2.2)),rk);}rkG=rk;}
   vec3 N=normalize(vN);vec3 Ne=normalize(vec3(N.xy*4.2,N.z));float df=max(dot(Ne,uSun),0.);
   vec3 amb=mix(uSkyHor*.35,uSkyTop*.5,N.z*.5+.5);float gold=1.-smoothstep(.2,.38,uSun.z);
   if(gold>0.){vec3 Ns=normalize(vec3(N.xy*1.8,N.z));float dw=clamp(dot(Ns,normalize(vec3(uSun.xy,.5)))*.6+.32,0.,1.);df=mix(df,dw*.95,gold);amb=mix(amb,uSkyTop*vec3(.8,1.,1.45)*.85,gold*.75);}
-  float fes=smoothstep(.2,.45,m.a);
+  float fes=smoothstep(.2,.45,m.a)*(1.-rkG);
   if(fes>0.){vec2 wq=vP.xy*vec2(1.,1.)+vec2(sin(uTime*.7+vP.y*.3)*.15,0.);float st=texture(uNoise,wq*vec2(2.2,.55)).r*.6+texture(uNoise,wq*vec2(.9,3.1)).g*.4;
     float bl=texture(uNoise,wq*vec2(7.3,1.6)+.21).b;float wb=1.-smoothstep(.2,.55,fp*7.3);st=mix(st,st*.55+bl*.7,wb);vec3 fc=mix(vec3(.46,.43,.27),vec3(.80,.72,.50),smoothstep(.32,.78,st))*mix(.8,1.1,nz.b)*mix(1.,.72+.5*bl,wb*.8);c=mix(c,pow(fc,vec3(2.2)),fes*.85);}
-  float slope=length(N.xy);float sdm=smoothstep(.3,.6,m.b);amb=mix(amb,vec3(dot(amb,vec3(.333)))*vec3(1.1,1.,.85),sdm);float fill=.58+.3*(1.-smoothstep(0.,.3,df))+gold*.25;vec3 col=c*(amb*fill+uSunCol*df*1.42)*(1.-clamp(slope*2.4,0.,.32)*grass);
-  {float gm=smoothstep(.8,.95,m.g);col=mix(col,col*vec3(1.08,1.2,1.02),gm);}
+  float slope=length(N.xy);float sdm=smoothstep(.3,.6,m.b);amb=mix(amb,vec3(dot(amb,vec3(.333)))*vec3(1.1,1.,.85),sdm);float fill=.58+.3*(1.-smoothstep(0.,.3,df))+gold*.25;vec3 col=c*(amb*fill+uSunCol*df*1.42)*(1.-clamp(slope*1.5,0.,.16)*grass);
+  {float gm=smoothstep(.8,.95,m.g);col=mix(col,col*vec3(1.03,1.09,1.0),gm);
+    // green material: cross-cut mowing (soft light/dark bands), fine grain, collar ring and exaggerated slope shading
+    float gu=(vP.x+vP.y)*.7071/3.6,gv=(vP.x-vP.y)*.7071/3.6;float fu=fwidth(gu),fv=fwidth(gv);float vis=1.-smoothstep(.12,.45,max(fu,fv));
+    float su=smoothstep(.25,.75,abs(fract(gu)-.5)*2.),sv=smoothstep(.25,.75,abs(fract(gv)-.5)*2.);col*=mix(1.,mix(.95,1.05,su)*mix(.975,1.025,sv),gm*vis);
+    vec3 Lg=normalize(vec3(N.xy*10.,N.z));col*=mix(1.,.86+.3*clamp(dot(Lg,uSun)*.8+.3,0.,1.),gm);col*=mix(1.,.94+.12*nz5.g,gm*w5);
+    float col2=smoothstep(.6,.7,m.g)*(1.-smoothstep(.76,.86,m.g));col*=1.-.08*col2;}
+  {float nc=1.-smoothstep(6.,55.,dE);col+=c*amb*.3*nc*(1.-df*.6);}
   col*=1.-.32*sgB*(1.-m.b*.6);{float face=smoothstep(.5,.6,m.b)*(1.-smoothstep(.62,.95,m.b));vec3 Lg=normalize(vec3(N.xy*6.,N.z));col*=1.-.24*face*clamp(.6-dot(Lg,uSun),0.,1.)*1.6;}col*=mix(1.,.9+.2*nz5.r,m.b*near);
   // water
   float w=smoothstep(.38,.62,m.r+(nz2.r-.5)*.1);
@@ -832,7 +859,7 @@ void main(){
     float wd=smoothstep(.5,1.,m.r);vec3 deep=mix(vec3(.025,.095,.105),vec3(.008,.04,.06),wd);vec3 rc=min(mix(skyCol(rf),uSkyTop,.45),vec3(1.))*vec3(.34,.52,.58);vec3 wc=mix(deep,rc,clamp(.1+fr*.42,0.,.45))+uSunCol*pow(max(dot(rf,uSun),0.),180.)*2.;wc*=(.9+.2*nz3.g)*.68;
     float shore=smoothstep(.35,.5,m.r)*(1.-smoothstep(.5,.75,m.r));wc=mix(wc,vec3(.16,.2,.12)*.5,shore*.35);
     float mb=textureLod(uMask,cuv,3.).r;float fo=(1.-smoothstep(.45,.95,mb))*w*uFoam*(1.-step(.001,outd)*uOuter);float wave=.5+.5*sin(mb*22.-uTime*1.3+nz.r*5.);fo*=smoothstep(.25,1.05,wave*(.5+.7*nz2.g))*(.45+.55*nz3.r)*smoothstep(.2,.55,textureLod(uMask,cuv,5.).r);
-    wc=mix(wc,vec3(.82,.87,.88),clamp(fo*.6,0.,.6));col=mix(col,wc,w);}
+    wc=mix(wc,vec3(.82,.87,.88),clamp(fo*.6,0.,.6));float sfl=uFoam*(1.-step(.001,outd))*smoothstep(.40,.5,m.r)*(1.-smoothstep(.56,.75,m.r))*(.55+.45*sin(uTime*1.2+(vP.x+vP.y)*.25+nz2.r*4.))*(.6+.6*nz3.g);wc=mix(wc,vec3(.9,.93,.94),clamp(sfl,0.,.75));col=mix(col,wc,w);}
   // cup & ball shadow
   float dc=length(vP.xy-uCup);col=mix(col,vec3(.01),1.-smoothstep(.112,.122,dc));col=mix(col,col*1.25+.04,smoothstep(.115,.122,dc)*(1.-smoothstep(.13,.14,dc)));
   float db=length(vP.xy-uBall.xy);col*=1.-.55*(1.-smoothstep(uBall.w*.4,uBall.w,db))*uBall.z;
@@ -942,11 +969,12 @@ function glSetHole(R,H,PX){
   for(let j=0;j<nY-1;j++)for(let i=0;i<nX-1;i++){if(XS[i]>=H.X0&&XS[i+1]<=H.X1&&YS[j]>=H.Y0&&YS[j+1]<=H.Y1)continue;const k=j*nX+i;oi.push(k,k+1,k+nX,k+1,k+nX+1,k+nX)}
   const outer=R.vao([{loc:0,n:3,d:op},{loc:1,n:3,d:on}],new Uint32Array(oi));
   // trees + border treeline
+  {let n=0;for(const t of H.trees)if(treeSpotOK(H,t.x,t.y,Math.min(4,t.w*.25)))H.trees[n++]=t;H.trees.length=n}
   const all=H.trees.slice();const TR=RNG('b'+H.course.id+H.hi);const mix=treeMix(H.course.id).filter(m=>m[0]!==6&&m[0]!==5);const dens=H.st.trees;
   const ring=(x,y)=>{const s=H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1));if(s===S_WATER)return;if(H.sea.length&&H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1))===S_WATER)return;
-    const sp=pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*TR.range(.68,1.32);all.push({x,y,sp,v:TR.int(4),h,w:h*S.w*TR.range(.85,1.2),out:1})};
+    const sp=pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*TR.range(.68,1.32);const w=h*S.w*TR.range(.85,1.2);if(!treeSpotOK(H,x,y,Math.min(4,w*.25)))return;all.push({x,y,sp,v:TR.int(4),h,w,out:1})};
   if(dens>.1){const s0=dens>.3?8:16;for(let d=6;d<150;d+=s0+d*.12){const step=s0+d*.1;for(let x=H.X0-d;x<H.X1+d;x+=step){if(TR()<.68){ring(x+TR()*step*.95,H.Y1+d+TR()*step*1.3);ring(x+TR()*step*.95,H.Y0-d-TR()*step*1.3)}}
-    for(let y=H.Y0-d;y<H.Y1+d;y+=step){if(TR()<.68){ring(H.X0-d-TR()*step*1.3,y+TR()*step*.95);ring(H.X1+d+TR()*step*1.3,y+TR()*step*.95)}}}}
+    for(let y=H.Y0-d;y<H.Y1+d;y+=step){if(TR()<.68){ring(H.X0-d-TR()*step*1.3,y+TR()*step*.95);ring(H.X1+d+TR()*step*1.3,y+TR()*step*.95)}}}}H.allTrees=all;
   if(all.length>6500)all.length=6500;
   {const n=all.length,ip=new Float32Array(n*4),iw=new Float32Array(n*4);all.forEach((t,i)=>{const S=SPECIES[t.sp];const inR=t.x>H.X0&&t.x<H.X1&&t.y>H.Y0&&t.y<H.Y1;
       const qh=t.h*S.qk;ip[i*4]=t.x;ip[i*4+1]=t.y;ip[i*4+2]=(inR?H.hAt(t.x,t.y):H.demAt(t.x,t.y)-.15)-.15;ip[i*4+3]=qh;iw[i*4]=qh*ATL.cw/ATL.ch;iw[i*4+1]=t.sp*4+t.v;iw[i*4+2]=hash2(i,7);iw[i*4+3]=hash2(7,i)<.5?1:-1});
@@ -974,7 +1002,7 @@ function glDraw(R,cam,S){
     gl.uniform4f(u.uBall,S.ball.x,S.ball.y,S.ballShadow,S.ballShadowR||.09);const rg=S.ring||[0,0,0,0];gl.uniform4f(u.uRing,rg[0],rg[1],rg[2],rg[3]);
     const am=S.aim||[0,0,0,0];gl.uniform4f(u.uAim,am[0],am[1],am[2],am[3]);gl.uniform1f(u.uAimOn,S.aim?1:0);gl.uniform1f(u.uPutt,S.putt||0);
     const gm=H.gm;gl.uniform4f(u.uG0,gm.cx,gm.cy,gm.tx,gm.ty);const gb=new Float32Array(16);gm.b.slice(0,4).forEach((b,i)=>gb.set(b,i*4));gl.uniform4fv(u.uGb,gb);
-    gl.uniform1f(u.uFoam,R.hole.H.sea.length?1:0);if(u.uSeaZ){const H=R.hole.H;if(H.seaZ===undefined){const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_DEEP||sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9}gl.uniform1f(u.uSeaZ,H.seaZ)}gl.uniform1f(u.uOuter,0);gl.bindVertexArray(R.hole.ter.v);gl.drawElements(gl.TRIANGLES,R.hole.ter.n,gl.UNSIGNED_INT,0);
+    gl.uniform1f(u.uFoam,R.hole.H.sea.length?1:0);if(u.uSeaZ){const H=R.hole.H;if(H.seaZ===undefined)seaLevel(H);if(H.seaZ===undefined){const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_DEEP||sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9}gl.uniform1f(u.uSeaZ,H.seaZ)}gl.uniform1f(u.uOuter,0);gl.bindVertexArray(R.hole.ter.v);gl.drawElements(gl.TRIANGLES,R.hole.ter.n,gl.UNSIGNED_INT,0);
     gl.uniform1f(u.uOuter,1);gl.uniform1f(u.uAimOn,0);gl.bindVertexArray(R.hole.outer.v);gl.drawElements(gl.TRIANGLES,R.hole.outer.n,gl.UNSIGNED_INT,0)}
   // trees (impostor billboards, alpha-tested, alpha-to-coverage)
   {const p=R.pTree;common(p);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.uniform1i(p.u.uAtl,3);gl.disable(gl.CULL_FACE);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
@@ -1003,6 +1031,16 @@ function glTracer(R,pts,n,eye,frac){
     P[m*3]=x+sx;P[m*3+1]=y+sy;P[m*3+2]=z+sz;A[m*2]=i/(n-1)*frac;A[m*2+1]=1;m++;P[m*3]=x-sx;P[m*3+1]=y-sy;P[m*3+2]=z-sz;A[m*2]=i/(n-1)*frac;A[m*2+1]=-1;m++}
   gl.bindBuffer(gl.ARRAY_BUFFER,R.tracer.attrs[0].buf);gl.bufferSubData(gl.ARRAY_BUFFER,0,P.subarray(0,m*3));gl.bindBuffer(gl.ARRAY_BUFFER,R.tracer.attrs[1].buf);gl.bufferSubData(gl.ARRAY_BUFFER,0,A.subarray(0,m*2));R.tracerN=m}
 
+/* global tree placement guard: never in water, the ocean (inside or beyond the hole box, matching what the renderer draws as water), below sea level, or on sand / greens / fringe / tees / fairways */
+function seaLevel(H){if(H.seaZ!==undefined)return H.seaZ;const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_DEEP||sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9;return H.seaZ}
+function treeSpotOK(H,x,y,r){const inB=(px,py)=>px>H.X0+.5&&px<H.X1-.5&&py>H.Y0+.5&&py<H.Y1-.5;const h2=1.6,pts=[[0,0],[r,0],[-r,0],[0,r],[0,-r],[r*.7,r*.7],[-r*.7,r*.7],[r*.7,-r*.7],[-r*.7,-r*.7],[h2,0],[-h2,0],[0,h2],[0,-h2],[2.2,0],[-2.2,0],[0,2.2],[0,-2.2]];
+  const sz=H.sea.length?seaLevel(H):-1e9;
+  for(const q of pts){const px=x+q[0],py=y+q[1];if(inB(px,py)){const s=H.surfAt(px,py);if(s===S_WATER||s===S_FW||s===S_TEE||s===S_FRINGE||s===S_GREEN||s===S_SAND)return false;if(sz>-900&&H.hAt(px,py)<sz+1.4)return false}
+    else{// beyond the box the renderer extends the edge mask outward and floods anything below the sea level
+      if(H.surfAt(clamp(px,H.X0+1,H.X1-1),clamp(py,H.Y0+1,H.Y1-1))===S_WATER)return false;if(sz>-900&&H.demAt(px,py)<sz+1.4)return false}}
+  const polys=H.sea.concat((H.F&&H.F.wa)||[]);for(let i=0;i<5;i++){const px=x+pts[i][0],py=y+pts[i][1];for(const P of polys)if(pip(px,py,P))return false}
+  return true}
+
 'use strict';
 /* ================= core game ================= */
 const CN=CLUBS.map(c=>c.id);
@@ -1022,7 +1060,7 @@ function clubCarry(ci,power,surf,wind,dir){const k=ci+'|'+power.toFixed(2)+'|'+s
 function windFor(seed){const R=RNG('w'+seed);const sp=R()<.15?R.range(0,2):R.range(2,R()<.25?16:11);const a=R()*TAU;return{x:Math.cos(a)*sp*MPS,y:Math.sin(a)*sp*MPS,mph:Math.round(sp),a}}
 function distYd(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 // ---------- hole lifecycle ----------
-function setHole(H,flags){G.H=H;G.holeAt=performance.now();const mt=Math.min(8192,(G.R&&G.R.gl&&G.R.gl.getParameter(G.R.gl.MAX_TEXTURE_SIZE))||4096);const px=Math.min(G.PXmax,mt/H.W,mt/H.H);glSetHole(G.R,H,px);G.flags=flags||[{x:H.cup.x,y:H.cup.y}];drawMiniBase()}
+function setHole(H,flags){G.H=H;G.holeAt=performance.now();const mt=Math.min(8192,(G.R&&G.R.gl&&G.R.gl.getParameter(G.R.gl.MAX_TEXTURE_SIZE))||4096);const px=Math.min(G.PXmax,mt/H.W,mt/H.H);glSetHole(G.R,H,px);G.flags=flags||[{x:H.cup.x,y:H.cup.y,col:pinInfo(H).col,pin:1}];drawMiniBase()}
 /* slope at the ball relative to the aim: up = uphill degrees (+ uphill), side = ball above feet degrees (+ above, right-handed) */
 function lieInfo(){const H=G.H,b=G.ball;if(!H||!H.gradAt)return null;const g=H.gradAt(b.x,b.y),ax=Math.cos(G.aim),ay=Math.sin(G.aim);
   const up=Math.atan(g[0]*ax+g[1]*ay)*180/Math.PI,side=Math.atan(g[0]*ay-g[1]*ax)*180/Math.PI;return{up,side}}
@@ -1042,16 +1080,16 @@ function recommend(){G.recForced=false;G.recFront=0;
     return}
   // forced carry: water or sand between the ball and the target -> pick by carry, not by total
   const D0=distYd(b,tgt),elv=d-D0;let haz=0;for(let t=12;t<D0-1;t+=1.5){const x=b.x+Math.cos(dir)*t,y=b.y+Math.sin(dir)*t,s=H.surfAt(x,y);if(s===S_WATER||s===S_DEEP||s===S_SAND)haz=t}
-  const forced=haz>0&&haz>D0*.45;let needC=forced?Math.max(d-3,haz+elv+6):0;G.recForced=forced;
+  const forced=haz>0&&haz>D0*.45;let needC=forced?Math.max(d+1,haz+elv+8):0;G.recForced=forced;
   // carry to the front of the green when there is trouble short of it, or when the green sits uphill (no forward roll to count on)
   if(D0>60&&!forced){let front=-1;for(let t=D0*.4;t<D0+.1;t+=1){const s=H.surfAt(b.x+Math.cos(dir)*t,b.y+Math.sin(dir)*t);if(s===S_GREEN||s===S_FRINGE){front=t;break}}
     if(front>0){let tr=false;for(let t=Math.max(12,front-35);t<front;t+=1.5){const s=H.surfAt(b.x+Math.cos(dir)*t,b.y+Math.sin(dir)*t);if(s!==S_FW&&s!==S_FRINGE&&s!==S_GREEN&&s!==S_TEE){tr=true;break}}
       const frontPL=front+elv;if(tr||elv>4){needC=Math.max(frontPL+2,elv>4?d-8:0);G.recFront=Math.round(frontPL)}}}
-  for(let i=list.length-1;i>=0;i--){const [ci,c]=list[i];if(needC>0&&!forced?(c.carry>=needC&&c.carry+(c.total-c.carry)*.5>=d-4):forced?c.carry>=needC:c.carry+(ci<4?(c.total-c.carry)*.5:(c.total-c.carry)*.6)>=d){pick=i;break}}
+  for(let i=list.length-1;i>=0;i--){const [ci,c]=list[i];if(needC>0&&!forced?(c.carry>=needC&&c.carry+(c.total-c.carry)*.5>=d-4):forced?c.carry>=needC+2:c.carry+(ci<4?(c.total-c.carry)*.5:(c.total-c.carry)*.6)>=d){pick=i;break}}
   if(pick<0){const [ci,c]=list[0];G.rec={ci,pw:1,txt:CN[ci]+' · '+Math.round(c.carry)+' carry'};return}
   const [ci,c]=list[pick];let pw=1;
   if(ci>=8){// partial wedge power by bisection
-    let lo=.2,hi=1;for(let k=0;k<14;k++){const m=(lo+hi)/2,cc=clubCarry(ci,m,b.surf,G.wind,dir);if((forced?cc.carry-needC:cc.carry+(cc.total-cc.carry)*.6-d)<0)lo=m;else hi=m}pw=Math.round(hi*100)/100}
+    let lo=.2,hi=1;for(let k=0;k<14;k++){const m=(lo+hi)/2,cc=clubCarry(ci,m,b.surf,G.wind,dir);if((forced?cc.carry-needC-2:cc.carry+(cc.total-cc.carry)*.6-d)<0)lo=m;else hi=m}pw=Math.round(hi*100)/100}
   else{// longer clubs: back off power so the expected (carry + half roll) matches the plays-like number
     const est=q=>{const cc=clubCarry(ci,q,b.surf,G.wind,dir);const e=cc.carry+(ci<4?(cc.total-cc.carry)*.5:(cc.total-cc.carry)*.6)-d;return forced?cc.carry-needC:needC>0?Math.min(cc.carry-needC,e+8):e};
     if(est(1)>8){let lo=.8,hi=1;if(est(lo)>0)hi=lo;else for(let k=0;k<12;k++){const m=(lo+hi)/2;if(est(m)<0)lo=m;else hi=m}pw=Math.round(hi*100)/100}}
@@ -1291,7 +1329,7 @@ function drawMiniBase(){const H=G.H,src=G.R.hole.mini;const c=document.createEle
   const s=Math.min(116/H.W,176/H.H);G.mini={c,s,ox:(120-H.W*s)/2,oy:(180-H.H*s)/2};g.drawImage(src,G.mini.ox,G.mini.oy,H.W*s,H.H*s)}
 function drawMini(bp){const m=G.mini;if(!m)return;const g=$('mini').getContext('2d'),H=G.H;g.drawImage(m.c,0,0);const P=(x,y)=>[m.ox+(x-H.X0)*m.s,m.oy+(H.Y1-y)*m.s];
   const b=P(bp[0],bp[1]);if(G.ring&&(G.phase==='address')){const r=P(G.ring.x,G.ring.y);g.strokeStyle='rgba(255,255,255,.85)';g.lineWidth=1.2;g.setLineDash([3,3]);g.beginPath();g.moveTo(b[0],b[1]);g.lineTo(r[0],r[1]);g.stroke();g.setLineDash([]);g.beginPath();g.arc(r[0],r[1],3,0,TAU);g.stroke()}
-  for(const f of G.flags||[]){const c=P(f.x,f.y);g.fillStyle='#ff3b30';g.fillRect(c[0]-1,c[1]-7,2,7);g.fillRect(c[0],c[1]-7,5,3)}
+  for(const f of G.flags||[]){const c=P(f.x,f.y);g.fillStyle=f.col?'rgb('+f.col.map(v=>Math.round(v*255)).join(',')+')':'#ff3b30';g.strokeStyle='rgba(0,0,0,.6)';g.lineWidth=.8;g.strokeRect(c[0]-1,c[1]-7,2,7);g.strokeRect(c[0],c[1]-7,5,3);g.fillRect(c[0]-1,c[1]-7,2,7);g.fillRect(c[0],c[1]-7,5,3)}
   g.fillStyle='#fff';g.strokeStyle='#000';g.beginPath();g.arc(b[0],b[1],2.6,0,TAU);g.fill();g.stroke()}
 // ---------- labels (range flags etc) ----------
 function project(x,y,z){const M=G.R.lastVP;if(!M)return null;const X=M[0]*x+M[4]*y+M[8]*z+M[12],Y=M[1]*x+M[5]*y+M[9]*z+M[13],W=M[3]*x+M[7]*y+M[11]*z+M[15];if(W<=0)return null;return[(X/W*.5+.5)*innerWidth,(1-(Y/W*.5+.5))*innerHeight]}
@@ -1787,6 +1825,35 @@ function chipMeterPw(){return G.rec&&G.rec.ci>=8?G.rec.pw:clamp(G.chip.d/G.chip.
 const _recommendC=recommend;recommend=function(){_recommendC.apply(this,arguments);try{chipSetup()}catch(e){G.chip=null}};
 const _executeShotC=executeShot;executeShot=function(inp){if(inp&&chipOn()&&Number.isFinite(inp.power)){inp=Object.assign({},inp);const yd=clamp(inp.power,0,1.15)*G.chip.max;inp.power=Math.max(.02,chipPhys(G.club,yd));inp.chipYds=yd}return _executeShotC(inp)};
 function chipPhysForRing(){if(!chipOn())return null;const mp=G.club===G.rec.ci?G.rec.pw:chipMeterPw();return chipPhys(G.club,mp*G.chip.max)}
+/* keep the left panel, club rail and recommendation in sync whenever the ball is moved while at address */
+const _setAddressK=setAddress;setAddress=function(){const r=_setAddressK.apply(this,arguments);const b=G.ball;if(b)G._addrKey=b.x.toFixed(2)+','+b.y.toFixed(2)+','+(G.H&&G.H.hi)+','+(G.H&&G.H.course&&G.H.course.id);return r};
+setInterval(()=>{try{if(!G.H||!G.ball||!G.ballOn||(G.phase!=='address'&&G.phase!=='putt')||G.sw)return;const b=G.ball;const k=b.x.toFixed(2)+','+b.y.toFixed(2)+','+G.H.hi+','+(G.H.course&&G.H.course.id);if(k!==G._addrKey)setAddress()}catch(e){}},250);
+
+/* pin flag colour by pin position on the green along the line of play: red = front third, white = middle, blue = back */
+const PIN_COLS={front:[.86,.12,.1],middle:[.97,.97,.95],back:[.13,.36,.92]};
+function pinInfo(H){try{const L=H.line,e=L[L.length-1];let a=L[Math.max(0,L.length-2)];if(Math.hypot(e[0]-a[0],e[1]-a[1])<1)a=[0,0];let ux=e[0]-a[0],uy=e[1]-a[1];const l=Math.hypot(ux,uy)||1;ux/=l;uy/=l;
+  let lo=1e9,hi=-1e9;for(let y=Math.floor(H.cup.y-60);y<H.cup.y+60;y+=.75)for(let x=Math.floor(H.cup.x-60);x<H.cup.x+60;x+=.75){if(x<=H.X0||x>=H.X1||y<=H.Y0||y>=H.Y1)continue;if(H.surfAt(x,y)!==S_GREEN)continue;const d=x*ux+y*uy;if(d<lo)lo=d;if(d>hi)hi=d}
+  if(!(hi>lo+2))return{loc:'middle',col:PIN_COLS.middle,t:.5};const t=(H.cup.x*ux+H.cup.y*uy-lo)/(hi-lo);const loc=t<1/3?'front':t<2/3?'middle':'back';return{loc,col:PIN_COLS[loc],t}}catch(e){return{loc:'middle',col:PIN_COLS.middle,t:.5}}}
+const _updHUDpin=updHUD;updHUD=function(){_updHUDpin.apply(this,arguments);try{const el=$('sDist');if(!el||!G.H)return;const f=(G.flags||[]).find(q=>q.pin);if(!f||G.mode!=='round'||G.ball.surf===S_GREEN)return;const loc=pinInfo.cache===G.H?pinInfo.v:(pinInfo.cache=G.H,pinInfo.v=pinInfo(G.H));
+  if(!el.querySelector('.pinc')){const sp=document.createElement('div');sp.className='pl pinc';el.appendChild(sp)}const sp=el.querySelector('.pinc');sp.innerHTML='<i style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;background:rgb('+loc.col.map(v=>Math.round(v*255)).join(',')+')"></i>'+loc.loc+' pin'}catch(e){}};
+/* versioned save schema: migrate older saves in place, never discard records; drop only a saved round that can no longer be resumed */
+const SAVE_SCHEMA=2;
+const SAVE_MIGRATIONS={
+  2:()=>{// v1.0-v1.11 -> 2: normalise records shape, validate the saved round against the current course list
+    const R=store('ts.rec');if(R&&typeof R==='object'){R.courses=R.courses&&typeof R.courses==='object'?R.courses:{};R.ld=R.ld||{best:0,day:{}};R.ctp=R.ctp||{best:null,day:{}};
+      R.stats=Object.assign({fw:[0,0],gir:[0,0],aces:0,longest:0,rounds:0},R.stats||{});store('ts.rec',R)}
+    const sv=store('ts.round');if(sv&&(!sv.r||!CID[sv.r.cid]||!Array.isArray(sv.r.sc)||!(sv.r.i>=0&&sv.r.i<(sv.r.n||18))))store('ts.round',null)}};
+function migrateSaves(){try{let v=+(localStorage.getItem('ts.schema')||1);if(!(v>=1))v=1;for(let k=v+1;k<=SAVE_SCHEMA;k++){if(SAVE_MIGRATIONS[k])SAVE_MIGRATIONS[k]()}if(v!==SAVE_SCHEMA)localStorage.setItem('ts.schema',String(SAVE_SCHEMA))}catch(e){}}
+migrateSaves();
+/* address camera clearance: lift the eye until the sight line to the landing area clears the terrain (no hillside filling the frame) */
+function camClearance(c){const H=G.H,b=G.ball;if(!c||!H||G.phase==='putt'||G.club===PUTTER||G.view===1)return c;const tgt=G.ring||{x:b.x+Math.cos(G.aim)*150,y:b.y+Math.sin(G.aim)*150};
+  const ex=c.eye[0],ey=c.eye[1],ez=c.eye[2],lx=tgt.x,ly=tgt.y,lz=H.hAt(lx,ly)+1;let need=ez;
+  for(let s=.08;s<.96;s+=.04){const x=ex+(lx-ex)*s,y=ey+(ly-ey)*s;const zt=(x>H.X0&&x<H.X1&&y>H.Y0&&y<H.Y1?H.hAt(x,y):H.demAt(x,y))+1.6;const req=(zt-s*lz)/(1-s);if(req>need)need=req}
+  need=Math.min(need,ez+30);if(need>ez+.05){const dz=need-ez;c.eye[2]=need;c.at[2]+=dz*.35;G.camLift=dz}else G.camLift=0;return c}
+const _camAddressC=camAddress;camAddress=function(){return camClearance(_camAddressC.apply(this,arguments))};
+/* HUD scales up on large viewports (1920x1080 and up) so it isn't tiny; 1x at <=1366x768 */
+function uiScale(){const s=Math.max(1,Math.min(1.45,Math.min(innerWidth/1366,innerHeight/768)));const hud=document.getElementById('hud');if(!hud)return;G.uiScale=s;for(const el of hud.children){if(el.id==='gl')continue;el.style.zoom=s===1?'':String(Math.round(s*100)/100)}}
+addEventListener('resize',uiScale);setTimeout(uiScale,0);
 
 </script>
 </body>
