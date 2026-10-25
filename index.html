@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.12';
+const VERSION='v1.13';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -201,7 +201,7 @@ function xmur(s){let h=1779033703^s.length;for(let i=0;i<s.length;i++){h=Math.im
 function RNG(seed){let a=typeof seed==='string'?xmur(seed):seed>>>0;const f=()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
   f.int=n=>Math.floor(f()*n);f.range=(x,y)=>x+f()*(y-x);f.pick=a=>a[Math.floor(f()*a.length)];f.chance=p=>f()<p;return f}
 function keyOfDate(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
-const todayKey=()=>keyOfDate(new Date());
+let todayKey=()=>keyOfDate(new Date());
 function dec(a){const o=[];let x=0,y=0;for(let i=0;i<a.length;i+=2){x+=a[i];y+=a[i+1];o.push([x/2,y/2])}return o}
 function plen(P){let s=0;for(let i=1;i<P.length;i++)s+=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]);return s}
 function pip(x,y,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const xi=P[i][0],yi=P[i][1],xj=P[j][0],yj=P[j][1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c}return c}
@@ -348,10 +348,22 @@ function groundRoll(F,surfAt,slopeAt,cup,rec){
       if(sp<1e-4&&Math.hypot(ax,ay)<dec)break;
       const ns=sp-dec*dt;if(ns<=0||(ns<.06&&Math.hypot(ax,ay)<dec*.9))break;
       vx*=ns/sp;vy*=ns/sp;const nx=x+vx*dt,ny=y+vy*dt;
-      if(cup){const sx=nx-x,sy=ny-y,L2=sx*sx+sy*sy;let t=L2?((cup.x-x)*sx+(cup.y-y)*sy)/L2:0;t=t<0?0:t>1?1:t;const cx=x+sx*t-cup.x,cy=y+sy*t-cup.y,cd=Math.hypot(cx,cy);const CUP=.118;
-        if(cd<CUP){if(ns<2.6*(1-.45*cd/CUP)){put(cup.x,cup.y,0);res.kind='sunk';x=cup.x;y=cup.y;break}
-          if(!lip){lip=1;const side=(cx*vy-cy*vx)>0?1:-1,a=side*(.35+.6*(1-cd/CUP)),c=Math.cos(a),sn=Math.sin(a),k=.7;const qx=(vx*c-vy*sn)*k,qy=(vx*sn+vy*c)*k;vx=qx;vy=qy;res.lip=1}}
-        else if(lip&&cd>CUP*2)lip=0}
+      if(cup){const sx=nx-x,sy=ny-y,L2=sx*sx+sy*sy;let t=L2?((cup.x-x)*sx+(cup.y-y)*sy)/L2:0;t=t<0?0:t>1?1:t;const cx=x+sx*t-cup.x,cy=y+sy*t-cup.y,cd=Math.hypot(cx,cy);
+        // cup physics (capture-speed rule): cup radius 2.125 in = .059 yd; the ball's centre must pass inside ~R+ (edge catch). Max capture speed ~1.63 m/s (1.78 yd/s) dead centre, falling to ~0 at the edge.
+        const RC=.066,LIPR=.084;const pinOn=cup.pin!==undefined?!!cup.pin:(typeof pinIn==='function'?pinIn():true);
+        const tu=L2?((cup.x-x)*sx+(cup.y-y)*sy)/L2:-1;// decide at the point of closest approach (the line's offset from the cup centre), not on first contact
+        if(cd<LIPR&&!lip&&tu>=0&&tu<=1){const e=Math.min(1,cd/RC);const vcap=e<1?1.78*Math.sqrt(1-e*e)+.08:0;const side=(cx*vy-cy*vx)>0?1:-1;res.cupV=ns;res.cupE=+(cd/RC).toFixed(2);
+          if(e<1&&ns<vcap){put(cup.x,cup.y,0);res.kind='sunk';x=cup.x;y=cup.y;break}
+          if(pinOn&&e<.6&&ns<6){// hits the flagstick: the pin soaks up pace, so a firm putt on line can still drop; a hard one rebounds (a very rare dead-centre blast can still fall)
+            const vpin=1.78+1.6*(1-e/.6);const lucky=e<.08&&((Math.sin(ns*917.3+e*311.7)*43758.5)%1+1)%1<.03;res.pinHit=1;
+            if(ns<vpin||lucky){put(cup.x,cup.y,0);res.kind='sunk';res.pin=1;x=cup.x;y=cup.y;break}
+            const after=ns*(.25+.2*e);const a=Math.PI-side*(.5+1.6*e),c=Math.cos(a),sn=Math.sin(a),k=after/ns;const qx=(vx*c-vy*sn)*k,qy=(vx*sn+vy*c)*k;vx=qx;vy=qy;lip=1;res.lip='pin'}
+          else if(ns<vcap*1.9+.5&&e>.3){// medium pace on the edge: lips out / horseshoes around the rim
+            const a=side*(.7+1.4*(1-e)*(1-e)+.35),c=Math.cos(a),sn=Math.sin(a),k=.55;const qx=(vx*c-vy*sn)*k,qy=(vx*sn+vy*c)*k;vx=qx;vy=qy;lip=1;res.lip='lip'}
+          else{// too fast: skips over the hole / catches the far rim and keeps rolling
+            const a=side*.12*(1-e)+side*.05,c=Math.cos(a),sn=Math.sin(a),k=ns>4?.9:.8;const qx=(vx*c-vy*sn)*k,qy=(vx*sn+vy*c)*k;vx=qx;vy=qy;lip=1;res.lip='over';
+            for(let q=1;q<=4;q++)put(x+vx*dt*q*.25,y+vy*dt*q*.25,.012*Math.sin(q/4*Math.PI))}}
+        else if(lip&&cd>LIPR*2.5)lip=0}
       x=nx;y=ny;put(x,y,0)}}
   res.x=x;res.y=y;res.n=n/3;res.surf=surfAt(x,y);return res}
 /* putt: initial speed (yd/s) along heading */
@@ -400,74 +412,85 @@ function demSample(id,x,y){const D=DEMS[id];if(!D)return 0;const h=demGrid(D,x,y
 /* Procedurally painted tree impostor atlas (8 species x 4 variants), cylindrical billboards in the renderer */
 // species: h = height range (yd), w = width/height ratio, cb = crown base (fraction of height), cr = collision radius factor
 const SPECIES=[
-  {n:'loblolly',h:[28,37],w:.34,cb:.5},
+  {n:'loblolly',h:[21,30],w:.42,cb:.44},
   {n:'oak',h:[15,21],w:1.0,cb:.3},
   {n:'maple',h:[14,19],w:.78,cb:.3},
   {n:'cypress',h:[10,15],w:1.25,cb:.35},
   {n:'palm',h:[12,20],w:.62,cb:.78},
   {n:'dogwood',h:[6,8.5],w:1.05,cb:.3},
   {n:'azalea',h:[1.6,2.6],w:2.0,cb:0},
-  {n:'pitchpine',h:[20,27],w:.5,cb:.4},
+  {n:'pitchpine',h:[17,24],w:.55,cb:.38},
   {n:'eucalyptus',h:[22,32],w:.55,cb:.42},
   {n:'sycamore',h:[16,24],w:.92,cb:.3}];
-const ATL={cols:8,rows:5,cw:256,ch:512};
+const ATL={cols:16,rows:5,cw:256,ch:512,nv:8};
 for(const S of SPECIES){S.thpx=Math.min(ATL.ch-8,(ATL.cw-10)/S.w);S.qk=(ATL.ch)/S.thpx;}// quad height = tree height * qk// cell = species*4+variant -> col=(cell%8),row=floor(cell/8)
 function paintTreeAtlas(){
-  const TS=Math.min(innerWidth,innerHeight)<700?1:1.5;ATL.ts=TS;// desktop: 1.5x atlas resolution for sharper foliage
+  const TS=Math.min(innerWidth,innerHeight)<700?.85:1.25;ATL.ts=TS;// desktop: 1.5x atlas resolution for sharper foliage
   const c=document.createElement('canvas');c.width=ATL.cols*ATL.cw*TS;c.height=ATL.rows*ATL.ch*TS;const g=c.getContext('2d');
-  for(let sp=0;sp<SPECIES.length;sp++)for(let v=0;v<4;v++){const cell=sp*4+v,cx=(cell%8)*ATL.cw,cy=Math.floor(cell/8)*ATL.ch;g.save();g.scale(TS,TS);g.beginPath();g.rect(cx,cy,ATL.cw,ATL.ch);g.clip();g.translate(cx,cy);paintTree(g,sp,v,RNG('tree'+sp+'_'+v));g.restore()}
+  for(let sp=0;sp<SPECIES.length;sp++)for(let v=0;v<ATL.nv;v++){const cell=sp*ATL.nv+v,cx=(cell%ATL.cols)*ATL.cw,cy=Math.floor(cell/ATL.cols)*ATL.ch;g.save();g.scale(TS,TS);g.beginPath();g.rect(cx,cy,ATL.cw,ATL.ch);g.clip();g.translate(cx,cy);paintTree(g,sp,v,RNG('tree'+sp+'_'+v));g.restore()}
   return c}
 function hsl(h,s,l,a){return`hsla(${h},${s}%,${l}%,${a===undefined?1:a})`}
-function clump(g,x,y,r,hue,sat,lit,R,dots){// one foliage clump: dark underside, sunlit top, leaf speckle
-  const gr=g.createRadialGradient(x-r*.25,y-r*.45,r*.1,x,y,r*1.05);gr.addColorStop(0,hsl(hue,sat,lit+10));gr.addColorStop(.6,hsl(hue,sat,lit));gr.addColorStop(1,hsl(hue+4,sat-6,lit-9));
-  g.fillStyle=gr;g.beginPath();const n=14;for(let i=0;i<=n;i++){const a=i/n*TAU,rr=r*(.7+R()*.45);const px=x+Math.cos(a)*rr,py=y+Math.sin(a)*rr*.86;i?g.lineTo(px,py):g.moveTo(px,py)}g.closePath();g.fill();
-  const nd=dots||Math.round(r*r*.22);for(let i=0;i<nd;i++){const a=R()*TAU,d=Math.sqrt(R())*r*.95,px=x+Math.cos(a)*d,py=y+Math.sin(a)*d*.86;const top=(py-y)/r;// -1 top .. 1 bottom
-    g.fillStyle=hsl(hue+R()*10-5,sat,lit+(top<0?8:-6)+R()*10-5,.85);g.beginPath();g.ellipse(px,py,.8+R()*1.6,.6+R()*1.1,R()*3,0,TAU);g.fill()}}
+function clump(g,x,y,r,hue,sat,lit,R,dots){// one foliage clump: a denser core plus a ragged fringe of leaf sprays (no smooth blob outline), dark underside, sunlit top
+  // leaves are batched into three light buckets (one path + one fill each) so the atlas paints fast
+  const gr=g.createRadialGradient(x-r*.25,y-r*.45,r*.1,x,y,r*.95);gr.addColorStop(0,hsl(hue,sat,lit+9));gr.addColorStop(.6,hsl(hue,sat,lit));gr.addColorStop(1,hsl(hue+4,sat-6,lit-9));
+  g.fillStyle=gr;g.beginPath();const n=18;for(let i=0;i<=n;i++){const a=i/n*TAU,rr=r*(.5+R()*.38);const px=x+Math.cos(a)*rr,py=y+Math.sin(a)*rr*.86;i?g.lineTo(px,py):g.moveTo(px,py)}g.closePath();g.fill();
+  const nl=Math.min(140,Math.round(r*r*.5)+Math.round((dots||0)*.5));const P=[new Path2D(),new Path2D(),new Path2D()];
+  for(let i=0;i<nl;i++){const a=R()*TAU,d=Math.pow(R(),.6)*r*1.05,px=x+Math.cos(a)*d,py=y+Math.sin(a)*d*.86;const top=(py-y)/r,side=(px-x)/r;
+    const k=top<-.25||(side<-.3&&R()<.5)?0:top>.3?2:(R()<.5?1:R()<.5?0:2);const s=R.range(.9,2.3);P[k].moveTo(px+s,py);P[k].ellipse(px,py,s,s*R.range(.45,.8),R()*3.2,0,TAU)}
+  g.fillStyle=hsl(hue-2,sat+3,lit+8,.92);g.fill(P[0]);g.fillStyle=hsl(hue+2,sat,lit,.9);g.fill(P[1]);g.fillStyle=hsl(hue+5,sat-4,lit-7,.9);g.fill(P[2])}
+function skyHoles(g,cx,cy,rx,ry,n,R){// punch small see-through gaps in a crown so it reads as branches and leaves, not a solid ball
+  g.save();g.globalCompositeOperation='destination-out';for(let i=0;i<n;i++){const a=R()*TAU,d=R.range(.35,.95);const x=cx+Math.cos(a)*rx*d,y=cy+Math.sin(a)*ry*d;const r=R.range(2.5,7.5);
+    g.fillStyle='rgba(0,0,0,'+R.range(.6,1).toFixed(2)+')';g.beginPath();g.ellipse(x,y,r,r*R.range(.5,1),R()*3,0,TAU);g.fill()}g.restore()}
 function trunk(g,x0,y0,x1,y1,w0,w1,col,dark){const nx=-(y1-y0),ny=x1-x0,l=Math.hypot(nx,ny)||1;const ux=nx/l,uy=ny/l;
   const gr=g.createLinearGradient(x0-w0,0,x0+w0,0);gr.addColorStop(0,col);gr.addColorStop(.6,col);gr.addColorStop(1,dark);g.fillStyle=gr;
-  g.beginPath();g.moveTo(x0+ux*w0,y0+uy*w0);g.lineTo(x1+ux*w1,y1+uy*w1);g.lineTo(x1-ux*w1,y1-uy*w1);g.lineTo(x0-ux*w0,y0-uy*w0);g.closePath();g.fill()}
+  g.beginPath();g.moveTo(x0+ux*w0,y0+uy*w0);g.lineTo(x1+ux*w1,y1+uy*w1);g.lineTo(x1-ux*w1,y1-uy*w1);g.lineTo(x0-ux*w0,y0-uy*w0);g.closePath();g.fill();
+  // bark: vertical fissures and plates, darker on the shaded side, lighter flecks on the lit side
+  const L=Math.hypot(x1-x0,y1-y0);let sd=(x0*73+y0*31+L*7)|0;const rn=()=>{sd=(sd*1103515245+12345)&0x7fffffff;return sd/0x7fffffff};
+  for(let k=0;k<L*Math.max(w0,w1)*.09;k++){const t=rn(),wt=w0+(w1-w0)*t,o=(rn()*2-1)*wt*.85;const px=x0+(x1-x0)*t+ux*o,py=y0+(y1-y0)*t+uy*o;const ln=2+rn()*7;
+    g.strokeStyle=o>wt*.2?'rgba(20,14,10,'+(.25+rn()*.3).toFixed(2)+')':rn()<.5?'rgba(25,18,12,.28)':'rgba(255,245,225,.13)';g.lineWidth=.6+rn()*1.1;g.beginPath();g.moveTo(px,py);g.lineTo(px+(x1-x0)/L*ln+(rn()-.5),py+(y1-y0)/L*ln);g.stroke()}}
 function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECIES[sp];
   const th=S.thpx,tw=th*S.w*.94;const hv=R()*8-4;
   if(sp===0||sp===7){// pines: tall bare trunk, sparse layered branch tiers of needle pads with sky gaps between them
-    const cb=sp===0?.5:.36;const tx=R.range(-5,5);trunk(g,bx,by,bx+tx,by-th*.98,8,2.5,'#7a5e48','#2b2119');
-    const hue=sp===0?96+hv:104+hv;const tiers=sp===0?9+Math.floor(R()*3):10+Math.floor(R()*3);
+    const cb=(sp===0?.5:.36)+[0,-.06,.05,-.1,.08,-.03,.02,-.08][v];const side=v%3===1?(R()<.5?-1:1):0;/* some crowns lopsided */const tx=R.range(-5,5);trunk(g,bx,by,bx+tx,by-th*.98,8,2.5,['#6b5646','#5f4d3f','#735b49','#665244'][v&3],'#2b2119');
+    const hue=sp===0?96+hv:104+hv;const tiers=sp===0?8+Math.floor(R()*3):7+Math.floor(R()*3);
     const pad=(x,y,len,dir,droop,sc)=>{// one branch: limb + needle spray along it
       g.strokeStyle='#3a2b20';g.lineWidth=2.2*sc;g.beginPath();g.moveTo(x,y);g.quadraticCurveTo(x+dir*len*.5,y-4*sc,x+dir*len,y+droop);g.stroke();
       const nn=Math.round(len*2.1);for(let k=0;k<nn;k++){const u=.15+.85*R(),px=x+dir*len*u,py=y-4*sc*u*(1-u)*2+droop*u*u+R.range(-5,3)*sc;
         const lit=u>.4&&R()<.55?27:16;g.strokeStyle=hsl(hue+R.range(-6,6),26+R()*10,lit+R.range(-4,6),.9);g.lineWidth=1.1;
         for(let q=0;q<3;q++){const an=-Math.PI/2+R.range(-1.3,1.3);const l=R.range(4,9)*sc;g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.cos(an)*l,py+Math.sin(an)*l*.8);g.stroke()}}
       // needle tufts give each pad volume and an uneven outline (not a flat disc)
-      for(let k=0;k<len*.12;k++){const u=.25+.75*R();clump(g,x+dir*len*u+R.range(-3,3),y-3*sc+droop*u*u+R.range(-6,2)*sc,R.range(4.5,8.5)*sc,hue+R.range(-5,5),24,17+R.range(-3,5),R,5)}
+      for(let k=0;k<len*.22+3;k++){const u=.15+.85*R();clump(g,x+dir*len*u+R.range(-5,5),y-5*sc+droop*u*u+R.range(-16,6)*sc,R.range(7,13.5)*sc,hue+R.range(-6,6),24,16+R.range(-3,6),R,5)}
       // sunlit top rim of the pad
       g.fillStyle=hsl(hue-4,30,33,.55);for(let k=0;k<len*.35;k++){const u=.3+.7*R();g.beginPath();g.ellipse(x+dir*len*u,y-5*sc+droop*u*u,R.range(1,2.4),R.range(.6,1.4),0,0,TAU);g.fill()}};
     for(let i=0;i<tiers;i++){const f=(i+R.range(-.25,.25))/tiers;const y=by-th*(cb+f*(1-cb)*.95);const x=bx+tx*(by-y)/th;
-      const env=sp===0?(.45+.55*Math.sin(Math.PI*Math.min(1,.15+f*1.05))):(1-f*.7);if(i>1&&i<tiers-2&&R()<.18)continue;const len=tw*.5*env*R.range(.55,1.15),sc=1.1-f*.35;
-      if(R()<.95)pad(x,y,len,-1,R.range(0,10),sc);if(R()<.95)pad(x,y+R.range(-8,8),len*R.range(.7,1),1,R.range(0,10),sc)}
+      const env=sp===0?(.45+.55*Math.sin(Math.PI*Math.min(1,.15+f*1.05))):(1-f*.7);if(i>1&&i<tiers-2&&R()<.22)continue;const len=tw*.5*env*R.range(.5,1.2),sc=1.1-f*.35;const ls=side<0?1.35:side>0?.6:1,rs=side>0?1.35:side<0?.6:1;
+      if(R()<.92)pad(x,y,len*ls,-1,R.range(0,12),sc);if(R()<.92)pad(x,y+R.range(-10,10),len*R.range(.65,1)*rs,1,R.range(0,12),sc)}
     // crown top tuft
     for(let k=0;k<3;k++)pad(bx+tx,by-th*.95+k*6,tw*.12,k%2?1:-1,2,.8)}
   else if(sp===1||sp===2){// oak / maple: visible trunk + limbs, broad crown of many clumps
     trunk(g,bx,by,bx+R.range(-4,4),by-th*.45,14,7,'#5d5146','#28201a');
     // irregular crown: limbs fork to 5-7 sub-crowns with sky gaps between them, ragged leaf fringe instead of one round ball
-    const hue=(sp===1?92:84)+hv,cyc=by-th*(sp===1?.66:.64),rx=tw*.47,ry=th*(sp===1?.32:.36);const ends=[];const nb=5+(R()*3|0);
+    const hue=(sp===1?92:84)+hv,cyc=by-th*(sp===1?.6:.6),rx=tw*.47,ry=th*(sp===1?.4:.42);const ends=[];const nb=5+(R()*3|0);
     g.strokeStyle='#3b2d22';g.lineCap='round';for(let i=0;i<nb;i++){const a=-Math.PI/2+(i/(nb-1)-.5)*2.4+R.range(-.2,.2),d=R.range(.55,1);const ex=bx+Math.cos(a)*rx*d,ey=cyc+Math.sin(a)*ry*d*.9+ry*.15;ends.push([ex,ey,R.range(.6,1)]);
       g.lineWidth=R.range(3,6);g.beginPath();g.moveTo(bx,by-th*.38);g.quadraticCurveTo(bx+(ex-bx)*.4+R.range(-8,8),by-th*.5,ex,ey);g.stroke();g.lineWidth=1.6;for(let k=0;k<2;k++){g.beginPath();g.moveTo(bx+(ex-bx)*.7,ey+(by-th*.45-ey)*.3);g.lineTo(ex+R.range(-22,22),ey+R.range(-22,6));g.stroke()}}
     for(let pass=0;pass<3;pass++)for(const [ex,ey,sz] of ends){const n=pass===0?4:pass===1?6:3;const cr=rx*.42*sz;for(let i=0;i<n;i++){const a=R()*TAU,d=Math.sqrt(R());const x=ex+Math.cos(a)*d*cr,y=ey+Math.sin(a)*d*cr*.8-(pass===2?cr*.25:0);
       clump(g,x,y,R.range(12,22)*(pass===2?.8:1),hue+R.range(-4,4),[22,30,34][pass],[12,20,28][pass]+R.range(-2,2),R)}}
     // ragged fringe: small leaf sprays sticking out past the crown edge
+    skyHoles(g,bx,cyc,rx*.95,ry*.95,26,R);
     for(const [ex,ey,sz] of ends){const cr=rx*.42*sz;for(let k=0;k<22;k++){const a=R()*TAU,x=ex+Math.cos(a)*cr*R.range(.95,1.35),y=ey+Math.sin(a)*cr*.8*R.range(.95,1.3);g.fillStyle=hsl(hue+R.range(-6,6),26,(Math.sin(a)<0?24:14)+R.range(-3,4),.8);g.beginPath();g.ellipse(x,y,R.range(1.5,3.5),R.range(1,2.4),R()*3,0,TAU);g.fill()}}}
   else if(sp===3){// Monterey cypress: leaning trunk, flat wind-sculpted layered canopy
     const lean=(v%2?1:-1)*R.range(.15,.35);const tx=bx+lean*tw*.6,ty=by-th*.55;trunk(g,bx,by,tx,ty,13,7,'#5a4636','#271d15');
     g.strokeStyle='#3b2d22';g.lineCap='round';for(let i=0;i<4;i++){g.lineWidth=R.range(3,5);g.beginPath();g.moveTo(tx,ty);g.lineTo(tx+R.range(-.45,.45)*tw,ty-R.range(10,60));g.stroke()}
-    const hue=108+hv,wind=lean>0?1:-1,nL=3+(v>>1);// flat-topped, wind-swept pads stacked downwind, lit edges on top, dark undersides
+    const hue=108+hv,wind=lean>0?1:-1,nL=3+(v&1)+(v>>2);// flat-topped, wind-swept pads stacked downwind, lit edges on top, dark undersides
     for(let L=0;L<nL;L++){const f=L/(nL-1),y=by-th*(.5+f*.36),w=tw*(.42-f*.15)*R.range(.88,1.05),cx=tx+wind*tw*(.02+f*.08)+R.range(-6,6);
       g.strokeStyle='#3b2d22';g.lineWidth=R.range(2.5,4.5);g.beginPath();g.moveTo(tx,ty);g.quadraticCurveTo(tx+(cx-tx)*.3,y+20,cx,y+4);g.stroke();
-      g.save();g.translate(cx,y);g.scale(1,.46);
-      g.fillStyle=hsl(hue+6,18,9,.9);g.beginPath();g.ellipse(0,14,w*1.02,34,0,0,TAU);g.fill();
+      g.save();g.translate(cx,y);g.scale(1,.62);
+      for(let i=0;i<12;i++)clump(g,R.range(-.92,.92)*w*(.75+R()*.25),R.range(4,24),R.range(11,19),hue+6,16,10,R,3);
       for(let i=0;i<18;i++){const x=R.range(-1,1)*w*.95,yy=R.range(-14,16);clump(g,x,yy,R.range(14,22),hue,20+L*2,18+f*8,R)}
       for(let i=0;i<11;i++){const x=R.range(-.95,.95)*w*.92,yy=-22+Math.abs(x)/w*12+R.range(-4,3);clump(g,x,yy,R.range(9,15),hue-4,26,30+f*6,R,10)}
       g.restore()}}
   else if(sp===4){// palm (sabal / royal): curved tapering ringed trunk, dead-frond boot, globe of arching fronds
-    const lean=R.range(-28,28),top={x:bx+lean,y:by-th*.8},ctl={x:bx+lean*.15+R.range(-10,10),y:by-th*.45};const royal=v>=2;
+    const lean=R.range(-28,28),top={x:bx+lean,y:by-th*.8},ctl={x:bx+lean*.15+R.range(-10,10),y:by-th*.45};const royal=(v&3)>=2;
     const at=t=>({x:(1-t)*(1-t)*bx+2*(1-t)*t*ctl.x+t*t*top.x,y:(1-t)*(1-t)*by+2*(1-t)*t*ctl.y+t*t*top.y});
     for(let i=0;i<40;i++){const t0=i/40,t1=(i+1)/40,p0=at(t0),p1=at(t1);const w0=royal?lerp(7.5,5.5,t0)*(1+.25*Math.sin(t0*9)):lerp(8,6,t0),w1=royal?lerp(7.5,5.5,t1)*(1+.25*Math.sin(t1*9)):lerp(8,6,t1);
       trunk(g,p0.x,p0.y,p1.x,p1.y,w0,w1,royal?'#b7b1a4':'#857256',royal?'#6d685f':'#3e3226');if(!royal&&i%2===0){g.strokeStyle='rgba(40,30,20,.45)';g.lineWidth=1.4;g.beginPath();g.moveTo(p0.x-w0,p0.y);g.lineTo(p0.x+w0,p0.y+2);g.stroke()}}
@@ -481,32 +504,33 @@ function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECI
         for(const sgn of[-1,1]){const ang=Math.atan2(ey-top.y,ex-top.x)+sgn*(royal?1.25:.85);g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.cos(ang)*ll,py+Math.sin(ang)*ll*.8+ll*.5);g.stroke()}}
       g.strokeStyle=hsl(70,25,lit+6);g.lineWidth=1.4;g.beginPath();g.moveTo(top.x,top.y);g.quadraticCurveTo(mx,my,ex,ey);g.stroke()}}
   else if(sp===5){// dogwood: small tree, layered horizontal branches, white/pink blossoms
-    trunk(g,bx,by,bx,by-th*.4,10,5,'#5d5146','#28201a');const pink=v>=2;
+    trunk(g,bx,by,bx,by-th*.4,10,5,'#5d5146','#28201a');const pink=(v&3)>=2;
     for(let i=0;i<16;i++){const a=R()*TAU,d=Math.sqrt(R());clump(g,bx+Math.cos(a)*d*tw*.45,by-th*.65+Math.sin(a)*d*th*.25,R.range(18,26),95+hv,28,18+R()*8,R,8)}
     for(let i=0;i<260;i++){const a=R()*TAU,d=Math.sqrt(R());const x=bx+Math.cos(a)*d*tw*.48,y=by-th*.66+Math.sin(a)*d*th*.28;g.fillStyle=pink?hsl(335,70,R.range(78,88)):hsl(50,30,R.range(88,97));g.beginPath();g.arc(x,y,R.range(2,3.6),0,TAU);g.fill()}}
   else if(sp===8){// eucalyptus: tall pale smooth-barked trunk with peeling patches, few upswept limbs, sparse drooping grey-green clumps
-    const lean=R.range(-18,18),tx=bx+lean,ty=by-th*R.range(.42,.66);trunk(g,bx,by,tx,ty,11,6,'#b3a68f','#5a5044');const spread=[.8,1.25,1,1.45][v];
+    const lean=R.range(-18,18),tx=bx+lean,ty=by-th*R.range(.42,.66);trunk(g,bx,by,tx,ty,11,6,['#a89b84','#9c8f78','#b0a28a','#94886f'][v&3],'#544a3e');const spread=[.8,1.25,1,1.45][v&3]*(v>3?1.12:1);
     for(let i=0;i<7;i++){const f=R();g.fillStyle=hsl(30,25,R.range(45,62),.7);g.beginPath();g.ellipse(lerp(bx,tx,f)+R.range(-4,4),lerp(by,ty,f),R.range(2,4),R.range(5,12),0,0,TAU);g.fill()}
     const limbs=[];const nl=3+(v%3)+(R()*2|0);for(let i=0;i<nl;i++){const ex=tx+R.range(-.45,.45)*tw*spread,ey=ty-th*R.range(.06,.34);limbs.push([ex,ey]);g.strokeStyle='#a0937c';g.lineCap='round';g.lineWidth=R.range(3,5);g.beginPath();g.moveTo(tx,ty+10);g.quadraticCurveTo((tx+ex)/2,ty-th*.05,ex,ey);g.stroke()}
-    const hue=88+hv;for(const [ex,ey] of limbs){const nk=5+(R()*6|0);for(let k=0;k<nk;k++)clump(g,ex+R.range(-26,26),ey+R.range(-14,30),R.range(10,19),hue+R.range(-6,6),16,[16,21,27][k%3],R,10)}
-    for(let k=0;k<5;k++)clump(g,tx+R.range(-.25,.25)*tw,by-th*R.range(.82,.95),R.range(10,16),hue,14,26,R,8)}
+    const hue=88+hv;for(const [ex,ey] of limbs){const nk=13+(R()*7|0);for(let k=0;k<nk;k++)clump(g,ex+R.range(-34,34),ey+R.range(-20,40),R.range(13,23),hue+R.range(-6,6),16,[16,21,27][k%3],R,10)}
+    for(let k=0;k<9;k++)clump(g,tx+R.range(-.3,.3)*tw,by-th*R.range(.78,.95),R.range(12,19),hue,14,26,R,8)}
   else if(sp===9){// sycamore: mottled white/tan forked trunk, broad open crown of lighter clumps
     const fx=bx+R.range(-4,4),fy=by-th*.36;trunk(g,bx,by,fx,fy,13,9,'#d8d0bf','#8b8170');
     for(let i=0;i<10;i++){const f=R();g.fillStyle=R()<.5?hsl(35,20,R.range(52,62),.8):hsl(80,10,R.range(70,82),.8);g.beginPath();g.ellipse(lerp(bx,fx,f)+R.range(-6,6),lerp(by,fy,f),R.range(3,6),R.range(3,7),R()*3,0,TAU);g.fill()}
     for(const d of[-1,1]){const ex=fx+d*tw*R.range(.18,.3),ey=by-th*R.range(.6,.7);trunk(g,fx,fy,ex,ey,8,4,'#e0d9ca','#8b8170')}
     const hue=80+hv,cyc=by-th*.68,rx=tw*.5,ry=th*.27;
-    for(let pass=0;pass<3;pass++){const n=pass===0?10:pass===1?14:9;for(let i=0;i<n;i++){const a=R()*TAU,d=Math.sqrt(R());clump(g,bx+Math.cos(a)*d*rx,cyc+Math.sin(a)*d*ry-(pass===2?ry*.15:0),R.range(18,28)*(pass===2?.8:1),hue,[24,32,36][pass],[17,25,33][pass],R)}}}
+    for(let pass=0;pass<3;pass++){const n=pass===0?10:pass===1?14:9;for(let i=0;i<n;i++){const a=R()*TAU,d=Math.sqrt(R());clump(g,bx+Math.cos(a)*d*rx,cyc+Math.sin(a)*d*ry-(pass===2?ry*.15:0),R.range(18,28)*(pass===2?.8:1),hue,[24,32,36][pass],[17,25,33][pass],R)}}skyHoles(g,bx,cyc,rx,ry,24,R);}
   else if(sp===6){// azalea: low dense mound with magenta / pink / white flowers
-    const hueF=[320,335,350,0][v],lf=[52,62,70,92][v];
+    const hueF=[320,335,350,0][v&3],lf=[52,62,70,92][v&3];
     for(let i=0;i<22;i++){const a=Math.PI+R()*Math.PI,d=Math.sqrt(R());clump(g,bx+Math.cos(a)*d*tw*.46,by-8+Math.sin(a)*d*th*.85,R.range(22,34),100+hv,26,16+R()*6,R,6)}
-    for(let i=0;i<700;i++){const a=Math.PI+R()*Math.PI,d=Math.sqrt(R());const x=bx+Math.cos(a)*d*tw*.47,y=by-10+Math.sin(a)*d*th*.9;g.fillStyle=v===3?hsl(0,0,R.range(88,98)):hsl(hueF+R()*10,75,lf*.8+R()*14);g.beginPath();g.arc(x,y,R.range(2,4),0,TAU);g.fill()}}
+    for(let i=0;i<700;i++){const a=Math.PI+R()*Math.PI,d=Math.sqrt(R());const x=bx+Math.cos(a)*d*tw*.47,y=by-10+Math.sin(a)*d*th*.9;g.fillStyle=(v&3)===3?hsl(0,0,R.range(88,98)):hsl(hueF+R()*10,75,lf*.8+R()*14);g.beginPath();g.arc(x,y,R.range(2,4),0,TAU);g.fill()}}
 }
 // per-course species mix [species, weight]
 const TREE_MIX={
   augusta:[[0,.78],[5,.1],[1,.08],[2,.04]],pinevalley:[[7,.62],[0,.32],[1,.06]],sandhills:[[1,.5],[7,.3],[2,.2]],shadowcreek:[[0,.55],[7,.35],[1,.1]],peachtree:[[0,.45],[1,.3],[2,.15],[5,.1]],
-  cypress:[[3,.92],[7,.08]],pebble:[[3,.72],[7,.25],[1,.03]],pacificdunes:[[7,.55],[3,.45]],seminole:[[4,.86],[7,.14]],riviera:[[8,.45],[9,.25],[1,.15],[4,.15]],lacc:[[8,.5],[9,.32],[4,.18]],
-  shinnecock:[[1,.6],[5,.4]],ngla:[[1,.55],[5,.45]],fishers:[[3,.5],[1,.3],[5,.2]],friars:[[7,.9],[1,.1]],oakmont:[[1,.5],[2,.5]],crystal:[[3,.4],[1,.3],[7,.3]],
+  cypress:[[3,.92],[7,.08]],pebble:[[3,.72],[7,.25],[1,.03]],pacificdunes:[[7,.8],[3,.2]],seminole:[[4,.86],[7,.14]],riviera:[[8,.45],[9,.25],[1,.15],[4,.15]],lacc:[[8,.5],[9,.32],[4,.18]],
+  shinnecock:[[1,.6],[5,.4]],ngla:[[1,.55],[5,.45]],fishers:[[3,.5],[1,.3],[5,.2]],friars:[[7,.9],[1,.1]],oakmont:[[1,.5],[2,.5]],crystal:[[1,.36],[2,.34],[7,.3]],
   prairie:[[1,.6],[2,.4]],chicago:[[1,.55],[2,.45]]};
+const TREE_X={wingedfoot:[[1,.5],[2,.38],[9,.12]],shadowcreek:[[0,.5],[7,.3],[1,.2]]};Object.assign(TREE_MIX,TREE_X);
 const TREE_DEFAULT=[[1,.45],[2,.35],[7,.2]];
 function treeMix(cid){return TREE_MIX[cid]||TREE_DEFAULT}
 function pickSpecies(mix,r){let a=0;for(const [s,w] of mix){a+=w;if(r<a)return s}return mix[0][0]}
@@ -524,7 +548,7 @@ const STYLE={
 STYLE.dunes=STYLE.sandhills;STYLE.prairie=Object.assign({},STYLE.links,{trees:.35,tree:0});
 const DENS={augusta:1.3,pinevalley:1.05,lookaway:.2,cypress:.7,shinnecock:.03,oakmont:.05,merion:.8,ngla:.05,sandhills:.03,pebble:.35,fishers:.04,chicago:.3,seminole:.45,wingedfoot:1,friars:.05,crystal:.9,lacc:.6,tcc:1,riviera:.8,muirfieldv:1,oaklandhills:.8,oakhill:1.1,peachtree:1,pacificdunes:.02,shadowcreek:1.2,prairie:.25};
 // per-course turf colours: Riviera's kikuyu fairways read lighter against darker rough so the split fairway and small greens show
-const STYLE_OVR={riviera:{rough:'#365a22',rough2:'#3c6126',fw:'#5d963a',fw2:'#6ba445'}};
+const STYLE_OVR={riviera:{rough:'#44692a',rough2:'#4b712f',fw:'#5d963a',fw2:'#6ba445'}};
 const TREEMIX={augusta:1,pinevalley:1,sandhills:1,lookaway:0,oakmont:0,crystal:2,riviera:0,shadowcreek:1,peachtree:1,seminole:3};
 const SCOL=['#000','rough','fw','fw','fringe','green','sand','water','deep','waste'];
 function fbm2(x,y,seed){let v=0,a=1,f=1/90;for(let o=0;o<4;o++){v+=a*vnoise(x*f+seed*7.1,y*f-seed*3.3);a*=.5;f*=2.03}return v}
@@ -672,7 +696,7 @@ function buildHole0(course,geo,hi,teeIdx,opts){
   const mix=treeMix(course.id);
   const addT=(x,y,s,sp0)=>{const k=surfIdx(x,y);if(k<0)return;const c=SU[k];if(c===2||c===3||c===5||c===4||c===6||c===7)return;
     for(const q of[[4,0],[-4,0],[0,4],[0,-4]]){const c2=surfAt(x+q[0],y+q[1]);if(c2===2||c2===5||c2===4||c2===3||c2===7)return}
-    const sp=sp0!==undefined?sp0:pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*(s||1);trees.push({x,y,sp,v:TR.int(4),h,w:h*S.w,cb:S.cb})};
+    const sp=sp0!==undefined?sp0:pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*(s||1);trees.push({x,y,sp,v:TR.int(8),h,w:h*S.w,cb:S.cb})};
   const kindOf=()=>undefined;
   // wood polygons: jittered grid
   const woodMask=new Uint8Array(W*H);{const c2=document.createElement('canvas');c2.width=W;c2.height=H;const g2=c2.getContext('2d');g2.fillStyle='#fff';
@@ -703,7 +727,7 @@ function buildHole0(course,geo,hi,teeIdx,opts){
   const treeHit=(x,y,z)=>{const gx=Math.floor(x/10),gy=Math.floor(y/10);for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){const l=TG[(gx+a)+','+(gy+b)];if(!l)continue;for(const t of l){const d=Math.hypot(x-t.x,y-t.y);if(d>t.w*.5)continue;
     if(z<t.h*t.cb){if(d<.4&&t.sp!==6)return t;if(t.sp===6&&z<t.h&&d<t.w*.4)return t;continue}if(z<t.h){const f=(z-t.h*t.cb)/(t.h*(1-t.cb));const rr=t.w*.5*(t.sp===0||t.sp===7?Math.sin(Math.PI*clamp(f*.9+.1,0,1)):Math.sqrt(Math.max(0,1-(2*f-1)**2)))*.8;if(d<rr)return t}}}return null};
   const fwAim=[];for(let s=0;s<yards;s+=5){const p=pointAt(hl,s);fwAim.push([p[0],p[1],surfAt(p[0],p[1])])}
-  return{course,hi,par,yards,teeIdx,line:hl,X0,Y0,X1,Y1,W,H,S:SU,HT,NW,NH,hAt,surfAt,slopeAt,greenH,greenG,gm,G,F,sea,cup,trees,treeHit,st,woodMask,tee:{x:0,y:0},pews,toRaw,demAt:dz,gradAt,teeFix:opts.teeFix,name:(course.names&&course.names[hi])||(hd.nm&&!/\d|hole|course/i.test(hd.nm)?hd.nm:''),sig:course.sig&&course.sig[hi+1],quarry:QP,synth:opts.synth||[],grid:opts.grid}}
+  return{rot,course,hi,par,yards,teeIdx,line:hl,X0,Y0,X1,Y1,W,H,S:SU,HT,NW,NH,hAt,surfAt,slopeAt,greenH,greenG,gm,G,F,sea,cup,trees,treeHit,st,woodMask,tee:{x:0,y:0},pews,toRaw,demAt:dz,gradAt,teeFix:opts.teeFix,name:(course.names&&course.names[hi])||(hd.nm&&!/\d|hole|course/i.test(hd.nm)?hd.nm:''),sig:course.sig&&course.sig[hi+1],quarry:QP,synth:opts.synth||[],grid:opts.grid}}
 
 function projOn(L,x,y){let best=1e9,bs=0,acc=0;for(let i=0;i<L.length-1;i++){const a=L[i],b=L[i+1],dx=b[0]-a[0],dy=b[1]-a[1],l2=dx*dx+dy*dy||1,l=Math.sqrt(l2);let t=((x-a[0])*dx+(y-a[1])*dy)/l2;if(i>0)t=Math.max(0,t);t=Math.min(1,t);const d=Math.hypot(a[0]+dx*t-x,a[1]+dy*t-y);if(d<best){best=d;bs=acc+t*l}acc+=l}return bs}
 // place tee so straight tee->pin distance equals scorecard yardage, on land, preferring OSM tee boxes
@@ -738,7 +762,7 @@ function paintHole(H,PX){
   const b=document.createElement('canvas');b.width=W;b.height=Hh;const bg=b.getContext('2d'),im=bg.createImageData(W,Hh);
   const hex=c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];
   const C=[hex(st.deep),hex(st.rough),hex(st.fw),hex(st.fw),hex('#5a923a'),hex('#62a040'),hex(st.sand),hex('#2c5a63'),hex(st.deep),hex(st.waste)];
-  C[0]=hex(st.deep).map(v=>v*.85|0);if((H.F.bk||[]).length)C[6]=hex(st.rough);if((H.F.sd||[]).length)C[9]=hex(st.rough);// bunkers are painted from their polygons (no 1-yd stair halo)
+  {const rr=hex(st.rough),dd=hex(st.deep);C[8]=dd.map((v,i)=>v*.6+rr[i]*.4|0);C[0]=C[8].map(v=>v*.9|0)}/* deep rough / woods floor: a softer step down from the rough (no dark smears) */if((H.F.bk||[]).length)C[6]=hex(st.rough);if((H.F.sd||[]).length)C[9]=hex(st.rough);// bunkers are painted from their polygons (no 1-yd stair halo)
   for(let j=0;j<Hh;j++)for(let i=0;i<W;i++){const s=S[j*W+i],c=C[s],o=((Hh-1-j)*W+i)*4;
     let v=1;if(s===1||s===8||s===0){v=1+.07*vnoise(i*.09,j*.09)+.05*vnoise(i*.31+9,j*.31)}
     im.data[o]=c[0]*v;im.data[o+1]=c[1]*v;im.data[o+2]=c[2]*v;im.data[o+3]=255}
@@ -752,14 +776,14 @@ function paintHole(H,PX){
   g.fillStyle=st.waste;for(const P of(F.sd||[])){path(P);g.fill()}
   // rough (OSM) + fairway with stripes
   g.fillStyle=st.rough;for(const P of(F.ro||[])){path(P);g.fill()}
-  const fwPat=mkStripe(st.fw,st.fw2,8,0),grPat=mkStripe('#6cae48','#64a443',2.4,35);
-  g.fillStyle=fwPat;for(const P of(F.fw||[])){path(P);g.fill()}
+  const fwPat=mkStripe(st.fw,st.fw2,8,0),grPat=mkStripe('#63a245','#5c9940',2.4,35);
+  g.fillStyle=st.fw;for(const P of(F.fw||[])){path(P);g.fill()}// mowing stripes are shaded in the terrain shader (smooth, hole-aligned, no paint-map blocks)
   // first cut fringe around fairways
   g.lineJoin='round';g.strokeStyle='rgba(62,100,40,.75)';g.lineWidth=2.4;for(const P of(F.fw||[])){path(P);g.stroke()}
-  const myTee=P=>{let x=0,y=0;for(const q of P){x+=q[0];y+=q[1]}return Math.hypot(x/P.length,y/P.length)<25};// other holes' tee boxes blend into the rough instead of reading as pale strips
-  g.fillStyle=st.fw;for(const P of(F.te||[])){g.globalAlpha=myTee(P)?.5:.22;path(P);g.fill()}g.globalAlpha=1;
+  const myTee=P=>{let x=0,y=0;for(const q of P){x+=q[0];y+=q[1]}return Math.hypot(x/P.length,y/P.length)<90};// this hole's whole tee complex (all tee sets) reads as one even tee; other holes' boxes blend into the rough// other holes' tee boxes blend into the rough instead of reading as pale strips
+  const nearTee=P=>{let x=0,y=0;for(const q of P){x+=q[0];y+=q[1]}return Math.hypot(x/P.length,y/P.length)<140};g.fillStyle=st.fw;for(const P of(F.te||[])){g.globalAlpha=myTee(P)?.4:.16;path(P);g.fill()}g.globalAlpha=1;// one even tee complex (no light/dark blocks between tee sets)
   g.strokeStyle='#558c37';g.lineWidth=3.6;for(const P of F.gr){path(P);g.stroke()}
-  g.fillStyle=grPat;for(const P of F.gr){path(P);g.fill()}
+  g.fillStyle='#5f9d43';for(const P of F.gr){path(P);g.fill()}
   // bunkers: lip, sand, inner shade
   for(const P of(F.bk||[])){path(P);g.strokeStyle='rgba(60,70,30,.55)';g.lineWidth=1.1;g.stroke();g.fillStyle=st.sand;g.fill();
     g.save();path(P);g.clip();g.strokeStyle='rgba(120,100,70,.35)';g.lineWidth=2.2;g.stroke();g.restore()}
@@ -799,7 +823,7 @@ function paintHole(H,PX){
       const n=2+(RS()*4|0);for(let i=0;i<n;i++){const a=RS()*TAU,d=RS()*t.w*.35,x=t.x+Math.cos(a)*d,y=t.y+Math.sin(a)*d;const sf=H.surfAt(x,y);if(sf!==1&&sf!==8&&sf!==0&&sf!==9)continue;const r=RS.range(.6,1.8)*PX;
         g.fillStyle=RS()<.35?'rgba(168,150,110,.35)':RS()<.5?'rgba(58,70,34,.55)':'rgba(84,92,46,.45)';g.beginPath();g.ellipse((x-X0)*PX,(Y1-y)*PX,r,r*RS.range(.6,1),RS()*3,0,TAU);g.fill()}}}
   // soft, capped tree shadows: one layer so overlapping crowns never stack darker than a single shadow, tinted by skylight so shaded turf stays green
-  const SHA=.19+.09*Math.max(0,Math.min(1,(.38-SUN_FRAME[2])/.18));const sz=Math.max(SUN_FRAME[2],.36),sx=-SUN_FRAME[0]/sz,sy=-SUN_FRAME[1]/sz;
+  const SHA=.15+.07*Math.max(0,Math.min(1,(.38-SUN_FRAME[2])/.18));const sz=Math.max(SUN_FRAME[2],.36),sx=-SUN_FRAME[0]/sz,sy=-SUN_FRAME[1]/sz;
   {const cv0=g.canvas,sc=document.createElement('canvas');sc.width=cv0.width;sc.height=cv0.height;const q=sc.getContext('2d');
   for(const t of H.trees){const ch=t.h*(t.cb+(1-t.cb)*.5),rx=t.w*.5,ox=sx*ch,oy=sy*ch;const cx=(t.x+ox-X0)*PX,cy=(Y1-(t.y+oy))*PX;
     const r=Math.max(rx,.6)*PX;const gr=q.createRadialGradient(cx,cy,r*.1,cx,cy,r*1.2);gr.addColorStop(0,'rgba(0,0,0,1)');gr.addColorStop(.55,'rgba(0,0,0,.85)');gr.addColorStop(1,'rgba(0,0,0,0)');q.fillStyle=gr;
@@ -868,10 +892,13 @@ void main(){
       c=mix(texture(uCol,cuv-n,-.75).rgb,texture(uCol,cuv+n,-.75).rgb,sgB);sgB=1.-smoothstep(0.,aa*3.+.05,abs(m.b-.5));}}
   if(m.g>.5&&m.g<.98&&m.b<.02){vec2 gd=vec2(texture(uMask,cuv+vec2(ey.x,0.)).g-texture(uMask,cuv-vec2(ey.x,0.)).g,texture(uMask,cuv+vec2(0.,ey.y)).g-texture(uMask,cuv-vec2(0.,ey.y)).g);
     if(dot(gd,gd)>1e-6){vec2 n=normalize(gd)*1.1/uReg.zw;float aa=fwidth(m.g)*.9+.015;float sh=smoothstep(.72-aa,.72+aa,m.g);c=mix(texture(uCol,cuv-n,-.75).rgb,texture(uCol,cuv+n,-.75).rgb,sh);}}
-  {float fwm=smoothstep(.07,.13,m.g)*(1.-smoothstep(.3,.42,m.g))*(1.-m.b);float sy=(uReg.y+uReg.w-vP.y)/8.;float fy=fwidth(sy);
-    float sq=smoothstep(.5-fy,.5+fy,fract(sy))-smoothstep(1.-fy,1.,fract(sy))+(1.-smoothstep(0.,fy,fract(sy)));float vis=1.-smoothstep(.15,.5,fy);
-    c*=mix(1.,mix(1.045,.955,sq),fwm*vis);}
-  float onG=smoothstep(.7,.8,m.g);c=mix(c,c*vec3(.95,1.06,.9)*1.03,onG*.4);
+  {// mowing: fairways in even lengthwise bands along the hole (3 yd mower passes), tees in a fine diamond; soft light/dark, anti-aliased, fades before it can alias
+    float fwm=smoothstep(.07,.13,m.g)*(1.-smoothstep(.3,.42,m.g))*(1.-m.b);float sx=vP.x/3.;float fx=fwidth(sx);float bnd=abs(fract(sx)-.5)*2.;float sq=smoothstep(.5-fx-.12,.5+fx+.12,bnd);float vis=1.-smoothstep(.18,.5,fx);
+    float cut=abs(fract(vP.y/22.)-.5)*2.;float cc=smoothstep(.1,.35,cut)*.3;// faint cross-cut every 22 yd (turning rows)
+    c*=mix(1.,mix(1.065,.935,mix(sq,1.-sq,cc*0.)),fwm*vis);
+    // rough vs fairway: rough reads darker and coarser; a soft darker band just outside the fairway edge shows the height step-down
+    float rgh=(1.-smoothstep(.04,.1,m.g))*(1.-m.b)*(1.-smoothstep(.3,.6,m.r));c*=mix(1.,.9,rgh);float edge=smoothstep(.0,.05,m.g)*(1.-smoothstep(.05,.1,m.g))*(1.-m.b);c*=1.-.1*edge;}
+  float onG=smoothstep(.7,.8,m.g);c=mix(c,c*vec3(.97,1.02,.93),onG*.4);
   float outd=length(max(abs(uv-.5)-.5,0.)*uReg.zw);
   vec4 nz=texture(uNoise,vP.xy*.045);vec4 nz2=texture(uNoise,vP.xy*.31);vec4 nz3=texture(uNoise,vP.xy*1.7);
   if(outd>0.){c=mix(c,uFar*(.85+.3*nz.r),clamp(outd/40.,0.,1.));}
@@ -898,11 +925,11 @@ void main(){
     float rip=.5+.5*sin(rq.y*2.4+nz2.r*5.);vec3 sc=vec3(.80,.74,.58)*(.93+.12*rip*(1.-smoothstep(.3,.6,fp*2.4)))*mix(.92,1.05,nz3.r);
     float sandf=uDune*(1.-tuft)*.85;vec3 fc=mix(gc*mix(.78,1.,tuft),sc,sandf);c=mix(c,pow(fc,vec3(2.2)),fes*.88);}
   float slope=length(N.xy);float sdm=smoothstep(.3,.6,m.b);amb=mix(amb,vec3(dot(amb,vec3(.333)))*vec3(1.1,1.,.85),sdm);float fill=.58+.3*(1.-smoothstep(0.,.3,df))+gold*.25;vec3 col=c*(amb*fill+uSunCol*df*1.42)*(1.-clamp(slope*1.5,0.,.16)*grass);
-  {float gm=smoothstep(.8,.95,m.g);col=mix(col,col*vec3(1.0,1.04,.98),gm);
+  {float gm=smoothstep(.8,.95,m.g);col=mix(col,col*vec3(.97,.99,.95),gm);
     // green material: cross-cut mowing (soft light/dark bands), fine grain, collar ring and exaggerated slope shading
     float gu=(vP.x+vP.y)*.7071/3.6,gv=(vP.x-vP.y)*.7071/3.6;float fu=fwidth(gu),fv=fwidth(gv);float vis=1.-smoothstep(.12,.45,max(fu,fv));
-    float su=smoothstep(.25,.75,abs(fract(gu)-.5)*2.),sv=smoothstep(.25,.75,abs(fract(gv)-.5)*2.);col*=mix(1.,mix(.95,1.05,su)*mix(.975,1.025,sv),gm*vis);
-    vec3 Lg=normalize(vec3(N.xy*10.,N.z));col*=mix(1.,.86+.3*clamp(dot(Lg,uSun)*.8+.3,0.,1.),gm);col*=mix(1.,.94+.12*nz5.g,gm*w5);
+    float su=smoothstep(.3,.7,abs(fract(gu)-.5)*2.),sv=smoothstep(.3,.7,abs(fract(gv)-.5)*2.);col*=mix(1.,mix(.945,1.055,su)*mix(.96,1.04,sv),gm*vis);
+    vec3 Lg=normalize(vec3(N.xy*10.,N.z));col*=mix(1.,.86+.3*clamp(dot(Lg,uSun)*.8+.3,0.,1.),gm);col*=mix(1.,.9+.2*nz5.g,gm*w5)*mix(1.,.93+.14*nz4.r,gm*w4);
     float col2=smoothstep(.6,.7,m.g)*(1.-smoothstep(.76,.86,m.g));col*=1.-.08*col2;}
   {float nc=1.-smoothstep(6.,55.,dE);col+=c*amb*.3*nc*(1.-df*.6);}
   col*=1.-.32*sgB*(1.-m.b*.6);{float face=smoothstep(.5,.6,m.b)*(1.-smoothstep(.62,.95,m.b));vec3 Lg=normalize(vec3(N.xy*6.,N.z));col*=1.-.24*face*clamp(.6-dot(Lg,uSun),0.,1.)*1.6;}col*=mix(1.,.9+.2*nz5.r,m.b*near);
@@ -934,9 +961,13 @@ void main(){
 layout(location=0) in vec2 aP;out vec2 vU;void main(){vU=aP;gl_Position=vec4(aP,.9999,1.);}`,`
 ${GLSL_COMMON}
 in vec2 vU;out vec4 o;uniform vec3 uF;uniform vec3 uR;uniform vec3 uU;uniform vec2 uT;uniform sampler2D uNoise;
-void main(){vec3 d=normalize(uF+uR*vU.x*uT.x+uU*vU.y*uT.y);vec3 c=skyCol(d);
-  if(d.z>0.){vec2 cp=d.xy/(d.z+.08)*.12+vec2(uTime*.0015,0.);float cl=texture(uNoise,cp).r*.6+texture(uNoise,cp*2.3).g*.3+texture(uNoise,cp*5.).b*.1;cl=smoothstep(.5,.78,cl)*smoothstep(.0,.25,d.z);
+void main(){vec3 d=normalize(uF+uR*vU.x*uT.x+uU*vU.y*uT.y);vec3 c=skyCol(d);float cl=0.;
+  {float s=max(dot(d,uSun),0.);vec3 wc=uSunCol/max(max(uSunCol.r,uSunCol.g),uSunCol.b);c+=wc*vec3(1.,.82,.62)*pow(s,5.)*.1*(1.-uSun.z);}// warm sky tint around the sun
+  if(d.z>0.){vec2 cp=d.xy/(d.z+.08)*.12+vec2(uTime*.0015,0.);cl=texture(uNoise,cp).r*.6+texture(uNoise,cp*2.3).g*.3+texture(uNoise,cp*5.).b*.1;cl=smoothstep(.5,.78,cl)*smoothstep(.0,.25,d.z);
     vec3 cc=mix(vec3(1.),uSunCol,.35)*mix(.85,1.15,pow(max(dot(d,uSun),0.),3.));c=mix(c,cc,cl*.75);}
+  {// the sun: a bright disc (~1.1 deg) with a soft limb and bloom, dimmed by cloud, morning haze and the horizon murk
+    float s=dot(d,uSun);vec3 wc=uSunCol/max(max(uSunCol.r,uSunCol.g),uSunCol.b);float hz=smoothstep(-.01,.08,d.z);float k=(1.-cl*.85)*(1.-.35*uMist)*mix(.35,1.,hz);
+    float disc=smoothstep(.99975,.99983,s);float bloom=pow(max(s,0.),900.)*1.2+pow(max(s,0.),120.)*.35;c+=(mix(vec3(1.,.98,.93),wc,.45)*disc*7.+wc*bloom)*k;}
   c=mix(c,uFogCol,smoothstep(.06,-.02,d.z)*.8);
   o=vec4(pow(tm(c),vec3(1./2.2)),1.);}`);
   R.pTree=prog(`
@@ -945,8 +976,8 @@ uniform mat4 uVP;uniform float uTime;uniform vec3 uEye;out vec3 vP;out vec2 vUV;
 void main(){vec2 v=uEye.xy-iP.xy;float l=length(v);vNear=smoothstep(5.,13.,l);v=l>.001?v/l:vec2(0.,1.);vec2 r=vec2(-v.y,v.x);
  float qh=iP.w,qw=iW.x;float sw=sin(uTime*1.1+iP.x*.21+iP.y*.17)*.010*qh*aQ.y*aQ.y;
  vec3 p=vec3(iP.xy+r*aQ.x*qw+vec2(.7,.4)*sw+r*(iW.z-.5)*.11*qh*aQ.y*aQ.y,iP.z+aQ.y*qh);
- float cell=iW.y;float col=mod(cell,8.),row=floor(cell/8.);float ux=iW.w>0.?aQ.x+.5:.5-aQ.x;
- vUV=vec2((col+clamp(ux,.012,.988))/8.,(row+clamp(1.-aQ.y,.016,.996))/5.);vP=p;vTint=iW.z;vY=aQ.y;vFace=dot(v,normalize(vec2(.38,-.52)));
+ float cell=iW.y;float col=mod(cell,16.),row=floor(cell/16.);float ux=iW.w>0.?aQ.x+.5:.5-aQ.x;
+ vUV=vec2((col+clamp(ux,.012,.988))/16.,(row+clamp(1.-aQ.y,.016,.996))/5.);vP=p;vTint=iW.z;vY=aQ.y;vFace=dot(v,normalize(vec2(.38,-.52)));
  gl_Position=uVP*vec4(p,1.);}`,`
 ${GLSL_COMMON}
 in vec3 vP;in vec2 vUV;in float vTint;in float vY;in float vFace;in float vNear;out vec4 o;uniform sampler2D uAtl;
@@ -957,13 +988,22 @@ void main(){vec4 t=texture(uAtl,vUV);if(t.a<.42||vNear<fract(sin(dot(gl_FragCoor
  vec3 V=normalize(vP-uEye);float back=pow(max(dot(V,uSun),0.),3.);col+=c*uSunCol*back*.35;
  col=fogit(col,vP);o=vec4(pow(tm(col),vec3(1./2.2)),t.a);}`);
   R.pMesh=prog(`
-layout(location=0) in vec3 aP;layout(location=1) in vec3 aN;uniform mat4 uVP;uniform mat4 uM;uniform float uFlag;uniform float uTime;out vec3 vP;out vec3 vN;
+layout(location=0) in vec3 aP;layout(location=1) in vec3 aN;uniform mat4 uVP;uniform mat4 uM;uniform float uFlag;uniform float uTime;out vec3 vP;out vec3 vN;out vec3 vO;
 void main(){vec3 p=aP;vec3 n=aN;if(uFlag>0.){float k=p.x;p.y+=sin(uTime*5.+k*3.2)*.12*k;p.z-=k*k*.06;n=normalize(vec3(-.38*k*cos(uTime*5.+k*3.2),-1.,0.));}
- vec4 w=uM*vec4(p,1.);vP=w.xyz;vN=normalize(mat3(uM)*n);gl_Position=uVP*w;}`,`
+ vec4 w=uM*vec4(p,1.);vP=w.xyz;vO=aP;vN=normalize(mat3(uM)*n);gl_Position=uVP*w;}`,`
 ${GLSL_COMMON}
-in vec3 vP;in vec3 vN;out vec4 o;uniform vec3 uC;uniform float uEmis;
-void main(){vec3 N=normalize(vN);if(!gl_FrontFacing)N=-N;float df=max(dot(N,uSun),0.);vec3 c=pow(uC,vec3(2.2));vec3 col=c*(mix(uSkyHor*.4,uSkyTop*.5,N.z*.5+.5)+uSunCol*df)+c*uEmis;
- vec3 V=normalize(uEye-vP);col+=uSunCol*pow(max(dot(reflect(-uSun,N),V),0.),40.)*.3;col=fogit(col,vP);o=vec4(pow(tm(col),vec3(1./2.2)),1.);}`);
+in vec3 vP;in vec3 vN;in vec3 vO;out vec4 o;uniform vec3 uC;uniform float uEmis;uniform float uBallD;
+void main(){vec3 N=normalize(vN);if(!gl_FrontFacing)N=-N;vec3 V=normalize(uEye-vP);
+ if(uBallD>0.){// golf ball: ~400 shallow dimples (cube-projected lattice) bend the normal, glossy clear-coat highlight and sky reflection
+   vec3 O=normalize(vO);vec3 a=abs(O);vec2 q;vec3 T,B;if(a.x>a.y&&a.x>a.z){q=O.yz/a.x;T=vec3(0.,1.,0.);B=vec3(0.,0.,1.);}else if(a.y>a.z){q=O.xz/a.y;T=vec3(1.,0.,0.);B=vec3(0.,0.,1.);}else{q=O.xy/a.z;T=vec3(1.,0.,0.);B=vec3(0.,1.,0.);}
+   vec2 g=q*4.2;vec2 cg=floor(g);vec2 f=fract(g)-.5;f+=(vec2(fract(sin(dot(cg,vec2(12.9,78.2)))*437.5),fract(sin(dot(cg,vec2(39.3,11.1)))*913.7))-.5)*.12;float r=length(f);float dim=1.-smoothstep(.36,.46,r);
+   float vis=1.-smoothstep(.08,.35,fwidth(g.x)+fwidth(g.y));vec3 off=(T*f.x+B*f.y)*dim*1.25*vis;N=normalize(N-off*.55);
+   float df=max(dot(N,uSun),0.);vec3 c=vec3(.86,.865,.85);float ao=1.-.16*dim*smoothstep(.15,.42,r)*vis;
+   vec3 amb=mix(uSkyHor*.55,uSkyTop*.75,N.z*.5+.5);vec3 col=c*(amb+uSunCol*df*1.05)*ao;
+   vec3 H=normalize(uSun+V);float fr=.04+.96*pow(1.-max(dot(N,V),0.),5.);col+=uSunCol*pow(max(dot(N,H),0.),90.)*.9*(1.-.5*dim*vis)+skyCol(reflect(-V,N))*fr*.2;
+   col=fogit(col,vP);o=vec4(pow(tm(col),vec3(1./2.2)),1.);return;}
+ float df=max(dot(N,uSun),0.);vec3 c=pow(uC,vec3(2.2));vec3 col=c*(mix(uSkyHor*.4,uSkyTop*.5,N.z*.5+.5)+uSunCol*df)+c*uEmis;
+ col+=uSunCol*pow(max(dot(reflect(-uSun,N),V),0.),40.)*.3;col=fogit(col,vP);o=vec4(pow(tm(col),vec3(1./2.2)),1.);}`);
   R.pTr=prog(`
 layout(location=0) in vec4 aP;uniform mat4 uVP;out vec2 vA;void main(){vA=aP.zw;gl_Position=uVP*vec4(aP.xy,0.,1.);}`.replace('vec4(aP.xy,0.,1.)','vec4(aP.xyz,1.)').replace('layout(location=0) in vec4 aP;','layout(location=0) in vec3 aP;layout(location=1) in vec2 aA;').replace('vA=aP.zw;','vA=aA;'),`
 in vec2 vA;out vec4 o;uniform vec3 uTc;uniform float uHead;
@@ -981,6 +1021,8 @@ void main(){float a=abs(vA.y);float glow=exp(-a*a*6.)*.55;float core=1.-smoothst
   // primitive meshes
   const meshFrom=(P,N,I)=>vao([{loc:0,n:3,d:new Float32Array(P)},{loc:1,n:3,d:new Float32Array(N)}],new Uint16Array(I));
   R.sphere=(()=>{const P=[],N=[],I=[],a=10,b=14;for(let i=0;i<=a;i++)for(let j=0;j<=b;j++){const t=i/a*Math.PI,p=j/b*TAU;const x=Math.sin(t)*Math.cos(p),y=Math.sin(t)*Math.sin(p),z=Math.cos(t);P.push(x,y,z);N.push(x,y,z)}
+    for(let i=0;i<a;i++)for(let j=0;j<b;j++){const k=i*(b+1)+j;I.push(k,k+b+1,k+1,k+1,k+b+1,k+b+2)}return meshFrom(P,N,I)})();
+  R.ballM=(()=>{const P=[],N=[],I=[],a=28,b=40;for(let i=0;i<=a;i++)for(let j=0;j<=b;j++){const t=i/a*Math.PI,p=j/b*TAU;const x=Math.sin(t)*Math.cos(p),y=Math.sin(t)*Math.sin(p),z=Math.cos(t);P.push(x,y,z);N.push(x,y,z)}
     for(let i=0;i<a;i++)for(let j=0;j<b;j++){const k=i*(b+1)+j;I.push(k,k+b+1,k+1,k+1,k+b+1,k+b+2)}return meshFrom(P,N,I)})();
   R.cyl=(()=>{const P=[],N=[],I=[],s=10;for(let j=0;j<=s;j++){const p=j/s*TAU,x=Math.cos(p),y=Math.sin(p);P.push(x,y,0,x,y,1);N.push(x,y,0,x,y,0)}for(let j=0;j<s;j++){const k=j*2;I.push(k,k+2,k+1,k+1,k+2,k+3)}return meshFrom(P,N,I)})();
   R.flagM=(()=>{const P=[],N=[],I=[],nx=10,ny=6;for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){P.push(i/nx,0,j/ny);N.push(0,-1,0)}for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*(nx+1)+i;I.push(k,k+1,k+nx+1,k+1,k+nx+2,k+nx+1)}return meshFrom(P,N,I)})();
@@ -1030,12 +1072,14 @@ function glSetHole(R,H,PX){
   const ring=(x,y)=>{const s=H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1));if(s===S_WATER)return;if(H.sea.length&&H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1))===S_WATER)return;
     // fewer trees behind the green (no uniform wall framing the flag), with gaps and stronger height variety
     const beyond=y>H.Y1-5;if(beyond&&TR()<.55)return;if(TR()<.12)return;
-    const sp=pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*TR.range(sp===8||sp===4?.5:.68,sp===8?1.45:1.32);const w=h*S.w*TR.range(.85,1.2);if(!treeSpotOK(H,x,y,Math.min(4,w*.25)))return;all.push({x,y,sp,v:TR.int(4),h,w,out:1})};
-  if(dens>.1){const s0=dens>.3?8:16;for(let d=6;d<150;d+=s0+d*.12){const step=s0+d*.1;for(let x=H.X0-d;x<H.X1+d;x+=step){if(TR()<.68){ring(x+TR()*step*.95,H.Y1+d+TR()*step*1.3);ring(x+TR()*step*.95,H.Y0-d-TR()*step*1.3)}}
-    for(let y=H.Y0-d;y<H.Y1+d;y+=step){if(TR()<.68){ring(H.X0-d-TR()*step*1.3,y+TR()*step*.95);ring(H.X1+d+TR()*step*1.3,y+TR()*step*.95)}}}}H.allTrees=all;
+    // natural stands: clumps and clearings from low-frequency noise instead of even rectangular rings
+    {const cl=vnoise(x*.022+H.hi*3.1,y*.022-H.hi*1.7)*.7+vnoise(x*.061+5,y*.061+2)*.3;{const q=clamp((cl-.28)/.34,0,1);if(TR()>q*q*(3-2*q)*1.15)return}}
+    const sp=pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*TR.range(sp===8||sp===4?.5:.68,sp===8?1.45:1.32);const w=h*S.w*TR.range(.85,1.2);if(!treeSpotOK(H,x,y,Math.min(4,w*.25)))return;all.push({x,y,sp,v:TR.int(8),h,w,out:1})};
+  if(dens>.1){const s0=dens>.3?8:16;for(let d=6;d<150;d+=s0+d*.12){const step=(s0+d*.1)*.78;for(let x=H.X0-d;x<H.X1+d;x+=step){if(TR()<.8){ring(x+TR.range(-.6,.6)*step*1.6,H.Y1+d+TR.range(-.5,1)*step*1.8);ring(x+TR.range(-.6,.6)*step*1.6,H.Y0-d-TR.range(-.5,1)*step*1.8)}}
+    for(let y=H.Y0-d;y<H.Y1+d;y+=step){if(TR()<.8){ring(H.X0-d-TR.range(-.5,1)*step*1.8,y+TR.range(-.6,.6)*step*1.6);ring(H.X1+d+TR.range(-.5,1)*step*1.8,y+TR.range(-.6,.6)*step*1.6)}}}}H.allTrees=all;
   if(all.length>6500)all.length=6500;
   {const n=all.length,ip=new Float32Array(n*4),iw=new Float32Array(n*4);all.forEach((t,i)=>{const S=SPECIES[t.sp];const inR=t.x>H.X0&&t.x<H.X1&&t.y>H.Y0&&t.y<H.Y1;
-      const qh=t.h*S.qk;ip[i*4]=t.x;ip[i*4+1]=t.y;ip[i*4+2]=(inR?H.hAt(t.x,t.y):H.demAt(t.x,t.y)-.15)-.15;const hv=.86+.28*hash2(i,19),wv=.8+.42*hash2(i,13);ip[i*4+3]=qh*hv;iw[i*4]=qh*hv*wv*ATL.cw/ATL.ch;iw[i*4+1]=t.sp*4+t.v;iw[i*4+2]=hash2(i,7);iw[i*4+3]=hash2(7,i)<.5?1:-1});
+      const qh=t.h*S.qk;ip[i*4]=t.x;ip[i*4+1]=t.y;ip[i*4+2]=(inR?H.hAt(t.x,t.y):H.demAt(t.x,t.y)-.15)-.15;const hv=.86+.28*hash2(i,19),wv=.8+.42*hash2(i,13);ip[i*4+3]=qh*hv;iw[i*4]=qh*hv*wv*ATL.cw/ATL.ch;iw[i*4+1]=t.sp*8+(t.v%8);iw[i*4+2]=hash2(i,7);iw[i*4+3]=hash2(7,i)<.5?1:-1});
     const v=R.treeV;gl.bindBuffer(gl.ARRAY_BUFFER,v.attrs[1].buf);gl.bufferData(gl.ARRAY_BUFFER,ip,gl.STATIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,v.attrs[2].buf);gl.bufferData(gl.ARRAY_BUFFER,iw,gl.STATIC_DRAW);v.inst=n}
   const hx=c=>[parseInt(c.slice(1,3),16)/255,parseInt(c.slice(3,5),16)/255,parseInt(c.slice(5,7),16)/255];const f1=hx(H.st.rough),f2=hx(H.st.deep);
   R.hole={H,tCol,tMask,ter,outer,mini:P.cv,far:[0,1,2].map(i=>f1[i]*.55+f2[i]*.45)};
@@ -1060,40 +1104,41 @@ function glDraw(R,cam,S){
     gl.uniform4f(u.uBall,S.ball.x,S.ball.y,S.ballShadow,S.ballShadowR||.09);const rg=S.ring||[0,0,0,0];gl.uniform4f(u.uRing,rg[0],rg[1],rg[2],rg[3]);
     const am=S.aim||[0,0,0,0];gl.uniform4f(u.uAim,am[0],am[1],am[2],am[3]);gl.uniform1f(u.uAimOn,S.aim?1:0);gl.uniform1f(u.uPutt,S.putt||0);
     const gm=H.gm;gl.uniform4f(u.uG0,gm.cx,gm.cy,gm.tx,gm.ty);const gb=new Float32Array(16);gm.b.slice(0,4).forEach((b,i)=>gb.set(b,i*4));gl.uniform4fv(u.uGb,gb);
-    gl.uniform1f(u.uFoam,R.hole.H.sea.length?1:0);if(u.uDune)gl.uniform1f(u.uDune,['dunes','prairie'].includes(R.hole.H.course.style)||['pacificdunes','sandhills','friars','pinevalley'].includes(R.hole.H.course.id)?1:0);if(u.uSeaZ){const H=R.hole.H;if(H.seaZ===undefined)seaLevel(H);if(H.seaZ===undefined){const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_DEEP||sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9}gl.uniform1f(u.uSeaZ,H.seaZ)}{const H=R.hole.H;outSea(H);if(u.uOutSea)gl.uniform1f(u.uOutSea,H.outZ>-900?1:0);if(u.uOutZ)gl.uniform1f(u.uOutZ,H.outZ)}gl.uniform1f(u.uOuter,0);gl.bindVertexArray(R.hole.ter.v);gl.drawElements(gl.TRIANGLES,R.hole.ter.n,gl.UNSIGNED_INT,0);
+    gl.uniform1f(u.uFoam,R.hole.H.sea.length?1:0);if(u.uDune)gl.uniform1f(u.uDune,['dunes','prairie'].includes(R.hole.H.course.style)||['pacificdunes','sandhills','friars','pinevalley'].includes(R.hole.H.course.id)?1:0);if(u.uSeaZ){const H=R.hole.H;if(H.seaZ===undefined)seaLevel(H);if(H.seaZ===undefined){const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9}gl.uniform1f(u.uSeaZ,H.seaZ)}{const H=R.hole.H;outSea(H);if(u.uOutSea)gl.uniform1f(u.uOutSea,H.outZ>-900?1:0);if(u.uOutZ)gl.uniform1f(u.uOutZ,H.outZ)}gl.uniform1f(u.uOuter,0);gl.bindVertexArray(R.hole.ter.v);gl.drawElements(gl.TRIANGLES,R.hole.ter.n,gl.UNSIGNED_INT,0);
     gl.uniform1f(u.uOuter,1);gl.uniform1f(u.uAimOn,0);gl.bindVertexArray(R.hole.outer.v);gl.drawElements(gl.TRIANGLES,R.hole.outer.n,gl.UNSIGNED_INT,0)}
   // trees (impostor billboards, alpha-tested, alpha-to-coverage)
   {const p=R.pTree;common(p);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.uniform1i(p.u.uAtl,3);gl.disable(gl.CULL_FACE);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
     const v=R.treeV;if(v.inst){gl.bindVertexArray(v.v);gl.drawArraysInstanced(gl.TRIANGLES,0,6,v.inst)}gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);gl.enable(gl.CULL_FACE)}
   // meshes: flags, pole, ball, tee
-  {const p=R.pMesh,u=p.u;common(p);gl.disable(gl.CULL_FACE);
+  {const p=R.pMesh,u=p.u;common(p);gl.uniform1f(u.uBallD,0);gl.disable(gl.CULL_FACE);
     const draw=(m,M,c,flag,em)=>{gl.uniformMatrix4fv(u.uM,false,M);gl.uniform3fv(u.uC,c);gl.uniform1f(u.uFlag,flag||0);gl.uniform1f(u.uEmis,em||0);gl.bindVertexArray(m.v);gl.drawElements(gl.TRIANGLES,m.n,m.it,0)};
     const TRS=(x,y,z,sx,sy,sz)=>new Float32Array([sx,0,0,0,0,sy,0,0,0,0,sz,0,x,y,z,1]);
     for(const f of S.flags||[]){const z=H.hAt(f.x,f.y);const dE=Math.hypot(cam.eye[0]-f.x,cam.eye[1]-f.y);const k=Math.max(1,dE/90),pr=Math.max(.014,dE*.0011);
       draw(R.cyl,TRS(f.x,f.y,z-.1,pr,pr,2.6+(k-1)*.6),[.97,.97,.94],0,.4);draw(R.flagM,TRS(f.x+pr,f.y,z+2.6+(k-1)*.6-.45*k,.7*k,1,.45*k),f.col||[.95,.85,.1],1,.45)}
     if(S.tee)draw(R.cyl,TRS(S.tee.x,S.tee.y,S.tee.z-.05,.006,.006,.06),[1,1,1]);
     for(const t of S.teeMarks||[]){draw(R.sphere,TRS(t.x,t.y,t.z+.08,.13,.13,.11),t.col,0,.15)}
-    for(const b of S.extraBalls||[])draw(R.sphere,TRS(b.x,b.y,b.z+.0233,.0233,.0233,.0233),[.95,.95,.95],0,.1);
-    if(S.ballOn){const b=S.ballPos;const dE=Math.hypot(cam.eye[0]-b[0],cam.eye[1]-b[1],cam.eye[2]-b[2]);const r=Math.max(.0233,dE*.0026*(S.ballBoost||1));draw(R.sphere,TRS(b[0],b[1],b[2]+r,r,r,r),[1,1,1],0,.35)}
+    gl.uniform1f(u.uBallD,1);for(const b of S.extraBalls||[])draw(R.ballM,TRS(b.x,b.y,b.z+.0233,.0233,.0233,.0233),[.95,.95,.95],0,.1);
+    if(S.ballOn){const b=S.ballPos;const dE=Math.hypot(cam.eye[0]-b[0],cam.eye[1]-b[1],cam.eye[2]-b[2]);const r=Math.max(.0233,dE*.0026*(S.ballBoost||1));draw(R.ballM,TRS(b[0],b[1],b[2]+r,r,r,r),[1,1,1],0,.35)}gl.uniform1f(u.uBallD,0);
     gl.enable(gl.CULL_FACE)}
   // tracer (additive)
   if(R.tracerN>2){const p=R.pTr;gl.useProgram(p.p);gl.uniformMatrix4fv(p.u.uVP,false,VP);gl.uniform3fv(p.u.uTc,S.tracerCol||[1,.55,.15]);gl.uniform1f(p.u.uHead,S.tracerHead||1);
     gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.depthMask(false);gl.disable(gl.CULL_FACE);gl.bindVertexArray(R.tracer.v);gl.drawArrays(gl.TRIANGLE_STRIP,0,R.tracerN);gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE)}
   gl.bindVertexArray(null);
   R.lastVP=VP;return VP}
-function glTracer(R,pts,n,eye,frac){
+function glTracer(R,pts,n,eye,frac,fN,H){if(fN===undefined)fN=n;
   // pts Float32Array xyz (yards) n points; build camera-facing ribbon up to frac
   const gl=R.gl;const P=new Float32Array(n*6),A=new Float32Array(n*4);let m=0;
   for(let i=0;i<n;i++){const x=pts[i*3],y=pts[i*3+1],z=pts[i*3+2];const j=Math.min(n-1,i+1),k=Math.max(0,i-1);let tx=pts[j*3]-pts[k*3],ty=pts[j*3+1]-pts[k*3+1],tz=pts[j*3+2]-pts[k*3+2];
-    const vx=x-eye[0],vy=y-eye[1],vz=z-eye[2];let sx=ty*vz-tz*vy,sy=tz*vx-tx*vz,sz=tx*vy-ty*vx;const l=Math.hypot(sx,sy,sz)||1;const d=Math.hypot(vx,vy,vz);const w=Math.max(.05,d*.0026);sx*=w/l;sy*=w/l;sz*=w/l;
+    const vx=x-eye[0],vy=y-eye[1],vz=z-eye[2];let sx=ty*vz-tz*vy,sy=tz*vx-tx*vz,sz=tx*vy-ty*vx;const l=Math.hypot(sx,sy,sz)||1;const d=Math.hypot(vx,vy,vz);const gnd=i>=fN-1&&H;const w=gnd?Math.max(.018,d*.0016):Math.max(.05,d*.0026);if(gnd){// ground trail: lay it flat on the turf just above the surface so it bends with the roll / putt break
+      const gz=H.hAt(x,y)+.012;const ux=tx,uy=ty,ul=Math.hypot(ux,uy)||1;P[m*3]=x-uy/ul*w;P[m*3+1]=y+ux/ul*w;P[m*3+2]=Math.max(z,gz);A[m*2]=i/(n-1)*frac;A[m*2+1]=1;m++;P[m*3]=x+uy/ul*w;P[m*3+1]=y-ux/ul*w;P[m*3+2]=Math.max(z,gz);A[m*2]=i/(n-1)*frac;A[m*2+1]=-1;m++;continue}sx*=w/l;sy*=w/l;sz*=w/l;
     P[m*3]=x+sx;P[m*3+1]=y+sy;P[m*3+2]=z+sz;A[m*2]=i/(n-1)*frac;A[m*2+1]=1;m++;P[m*3]=x-sx;P[m*3+1]=y-sy;P[m*3+2]=z-sz;A[m*2]=i/(n-1)*frac;A[m*2+1]=-1;m++}
   gl.bindBuffer(gl.ARRAY_BUFFER,R.tracer.attrs[0].buf);gl.bufferSubData(gl.ARRAY_BUFFER,0,P.subarray(0,m*3));gl.bindBuffer(gl.ARRAY_BUFFER,R.tracer.attrs[1].buf);gl.bufferSubData(gl.ARRAY_BUFFER,0,A.subarray(0,m*2));R.tracerN=m}
 
 /* global tree placement guard: never in water, the ocean (inside or beyond the hole box, matching what the renderer draws as water), below sea level, or on sand / greens / fringe / tees / fairways */
-function seaLevel(H){if(H.seaZ!==undefined)return H.seaZ;const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_DEEP||sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9;return H.seaZ}
+function seaLevel(H){if(H.seaZ!==undefined)return H.seaZ;const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9;return H.seaZ}
 /* open water beyond the hole box: on when the hole has sea polygons or much of the box border is water; level = median height of water cells near the border */
 const OUT_SEA_COURSES={ngla:1,shinnecock:1,fishers:1,friars:1,pebble:1,cypress:1,pacificdunes:1,seminole:1};
-function outSea(H){if(H.outZ!==undefined)return H.outZ;let n=0,wn=0;const z=[];const isW=(x,y)=>{const s=H.surfAt(x,y);return s===S_WATER||s===S_DEEP};
+function outSea(H){if(H.outZ!==undefined)return H.outZ;let n=0,wn=0;const z=[];const isW=(x,y)=>{const s=H.surfAt(x,y);return s===S_WATER};
   for(let x=H.X0+1;x<H.X1-1;x+=2)for(const y of [H.Y0+1,H.Y1-1]){n++;if(isW(x,y))wn++}for(let y=H.Y0+1;y<H.Y1-1;y+=2)for(const x of [H.X0+1,H.X1-1]){n++;if(isW(x,y))wn++}
   if(H.sea.length&&seaLevel(H)>-900){H.outZ=H.seaZ;return H.outZ}
   // only on the sea/bay courses: on inland courses a creek or pond at the box edge must never flood the low ground beyond
@@ -1168,7 +1213,10 @@ function defaultAim(){const H=G.H,b=G.ball;let t=curTarget();
     // aim at the middle of the fairway at that distance (never along a shoreline)
     const q=pointAt(H.line,Math.max(s,30)+3),dx=q[0]-p[0],dy=q[1]-p[1],l=Math.hypot(dx,dy)||1,nx=-dy/l,ny=dx/l;let best=null;
     for(let a=-35;a<=35;a++){const x=p[0]+nx*a,y=p[1]+ny*a;if(H.surfAt(x,y)!==S_FW)continue;let b=a;while(b<60&&H.surfAt(p[0]+nx*(b+1),p[1]+ny*(b+1))===S_FW)b++;const mid=(a+b)/2;if(!best||Math.abs(mid)<Math.abs(best))best=mid;a=b}
-    if(best!==null){const d=Math.hypot(p[0]+nx*best-b.x,p[1]+ny*best-b.y);t={x:p[0]+nx*best,y:p[1]+ny*best}}}
+    if(best!==null){const d=Math.hypot(p[0]+nx*best-b.x,p[1]+ny*best-b.y);t={x:p[0]+nx*best,y:p[1]+ny*best}}
+    else{// no fairway straight across from the line point: search the landing arc (driver distance, +-35 deg) for the nearest fairway, so the aim and camera find the real landing zone
+      const base=Math.atan2(p[1]-b.y,p[0]-b.x);let bs=1e9;for(let da=-35;da<=35;da+=1.5)for(let r=Math.max(30,s-60);r<=s+10;r+=4){const a=base+da*Math.PI/180,x=b.x+Math.cos(a)*r,y=b.y+Math.sin(a)*r;if(H.surfAt(x,y)!==S_FW)continue;
+        const sc=Math.hypot(x-p[0],y-p[1])+Math.abs(r-s)*.4;if(sc<bs){bs=sc;t={x,y}}}}}
   G.aim=Math.atan2(t.y-b.y,t.x-b.x)}
 function setAddress(fromShot){
   const b=G.ball;b.surf=G.H.surfAt(b.x,b.y);G.phase=b.surf===S_GREEN?'putt':'address';
@@ -1260,6 +1308,8 @@ function camAddress(){const b=G.ball,H=G.H,h=H.hAt(b.x,b.y),ax=Math.cos(G.aim),a
     const back=clamp(2.4+d*.09,2.4,7),up=clamp(.85+d*.05,.85,3.2);const look=Math.min(d,14);
     return{eye:v3(b.x-ax*back,b.y-ay*back,h+up),at:v3(b.x+ax*look,b.y+ay*look,H.hAt(b.x+ax*look,b.y+ay*look)),fov:.78}}
   if(G.view===1){const r=G.ring||{x:b.x+ax*150,y:b.y+ay*150};const lx=r.x,ly=r.y;const d=Math.hypot(lx-b.x,ly-b.y);return{eye:v3(b.x-ax*25,b.y-ay*25,h+Math.max(30,d*.42)),at:v3(lerp(b.x,lx,.75),lerp(b.y,ly,.75),0),fov:.85}}
+  {const tg0=G.ring||{x:b.x+ax*150,y:b.y+ay*150};const d0=Math.hypot(tg0.x-b.x,tg0.y-b.y);if(d0<70){// short game (chips, pitches, bunker shots): low natural camera just behind and above the ball
+    const bk=3.3+d0*.03,up=1.25+d0*.014,tx=b.x+ax*d0,ty=b.y+ay*d0;const ez=Math.max(h+up,H.hAt(b.x-ax*bk,b.y-ay*bk)+1.1);return{eye:v3(b.x-ax*bk,b.y-ay*bk,ez),at:v3(tx,ty,H.hAt(tx,ty)+.2),fov:clamp(.62+(70-d0)*.002,.62,.74)}}}
   const tgt=G.ring||{x:b.x+ax*150,y:b.y+ay*150};const dd=clamp(Math.hypot(tgt.x-b.x,tgt.y-b.y),30,260);const tx=b.x+ax*dd,ty=b.y+ay*dd;const bk=5.4+dd*.025,up=2.8+dd*.028;return{eye:v3(b.x-ax*bk,b.y-ay*bk,h+up),at:v3(tx,ty,Math.max(H.hAt(tx,ty)+1,h+up-dd*.055)),fov:clamp(2*Math.atan(40/dd),.5,.8)}}
 function camSnap(){G.cam=camAddress();G.camT=null}
 function camLerp(c,t,k){for(let i=0;i<3;i++){c.eye[i]=lerp(c.eye[i],t.eye[i],k);c.at[i]=lerp(c.at[i],t.at[i],k)}c.fov=lerp(c.fov,t.fov,k)}
@@ -1284,8 +1334,10 @@ function updCam(dt){
     // follow: stay behind origin, track ball, drift forward and up for short shots
     const ax=Math.cos(G.aim),ay=Math.sin(G.aim);const fr=clamp(a.t/Math.max(.1,tf),0,1);
     let ex=a.from.x-ax*5.2,ey=a.from.y-ay*5.2,ez=H.hAt(a.from.x,a.from.y)+2.5+fr*3;
-    if(carry<=95){ex=lerp(ex,bp[0]-ax*16,smooth(Math.min(1,a.t/2)));ey=lerp(ey,bp[1]-ay*16,smooth(Math.min(1,a.t/2)));ez=Math.max(ez,H.hAt(ex,ey)+4)}
-    const k=1-Math.exp(-dt*8);const at=v3(bp[0],bp[1],bp[2]);if(!G.cam)G.cam=camAddress();
+    if(carry<=95){// low chase cam for short shots: behind and a little above the ball, tracking it (no bird's-eye)
+      if(!a.cam0)a.cam0={eye:(G.cam?G.cam.eye:camAddress().eye).slice()};const c0=a.cam0;const f2=smooth(Math.min(1,a.t/1.1));const cx=bp[0]-ax*6.5,cy=bp[1]-ay*6.5;const gz=H.hAt(cx,cy);const bz=H.hAt(bp[0],bp[1]);const cz=Math.max(gz+1.3,Math.min(gz+1.3+(bp[2]-bz)*.35,gz+4.2));a.chase=1;
+      ex=lerp(c0.eye[0],cx,f2);ey=lerp(c0.eye[1],cy,f2);ez=Math.max(lerp(c0.eye[2],cz,f2),H.hAt(ex,ey)+1.1)}
+    const k=1-Math.exp(-dt*8);const at=a.chase?v3(bp[0]+ax*3,bp[1]+ay*3,lerp(bp[2],H.hAt(bp[0],bp[1]),.45)):v3(bp[0],bp[1],bp[2]);if(!G.cam)G.cam=camAddress();
     G.cam.eye=[ex,ey,ez];G.cam.at=G.cam.at.map((v,i)=>lerp(v,at[i],k));G.cam.fov=lerp(G.cam.fov,.66,dt*.8);return}
   if(G.phase==='address'||G.phase==='putt'||G.phase==='swing'){const t=camAddress();if(!G.cam)G.cam=t;camLerp(G.cam,t,1-Math.exp(-dt*9));return}
   if(G.phase==='holed'||G.phase==='rest'){if(G.cam){const t=G.cam;t.at=t.at.slice()}}}
@@ -1310,9 +1362,9 @@ function frame(now){requestAnimationFrame(frame);const _t0=performance.now();
   else if(G.phase==='rest'){G.restT+=dt;if(G.restT>(G.anim&&G.anim.put?.8:1.7)){if(G.mode==='round'||G.restHandler===undefined){G.phase='x';(G.afterRest||nextAddress)()}}}
   if(G.phase==='replay')replayTick(dt);
   updCam(dt);
-  {const hv=(G.phase==='address'||G.phase==='swing')?1:0;const he=$('hint');if(he.style.opacity!=hv)he.style.opacity=hv;const fl=G.phase==='flight'||G.phase==='rest'||G.phase==='holed'||G.phase==='replay';const hu=$('hud');if(hu.classList.contains('fly')!==fl)hu.classList.toggle('fly',fl)}
+  {const hv=(G.phase==='address'||G.phase==='swing')&&swingHintOn()?1:0;const he=$('hint');if(he.style.opacity!=hv)he.style.opacity=hv;const fl=G.phase==='flight'||G.phase==='rest'||G.phase==='holed'||G.phase==='replay';const hu=$('hud');if(hu.classList.contains('fly')!==fl)hu.classList.toggle('fly',fl)}
   // compose scene
-  const S={teeMarks:G.mode==='round'?G.teeMarks:null,time:G.time,cup:G.cupOn===false?null:G.H.cup,flags:G.flags,ball:{x:0,y:0},ballShadow:0,ballOn:G.ballOn!==false,putt:0,extraBalls:G.extraBalls};
+  const S={teeMarks:G.mode==='round'?G.teeMarks:null,time:G.time,cup:G.cupOn===false?null:G.H.cup,flags:(typeof pinHidden==='function'&&pinHidden())?[]:G.flags,ball:{x:0,y:0},ballShadow:0,ballOn:G.ballOn!==false,putt:0,extraBalls:G.extraBalls};
   let bp;if((G.phase==='flight'||G.phase==='rest'||G.phase==='holed'||G.phase==='replay')&&G.anim){bp=ballAt(G.anim,G.anim.t)}else{const b=G.ball;bp=[b.x,b.y,G.H.hAt(b.x,b.y)]}
   if(G.phase==='holed')S.ballOn=false;
   S.ballPos=bp;S.ball={x:bp[0],y:bp[1]};const gz=G.H.hAt(bp[0],bp[1]);const hz=bp[2]-gz;S.ballShadow=clamp(1-hz/40,0,1)*.9;S.ballShadowR=.07+hz*.004;
@@ -1320,7 +1372,8 @@ function frame(now){requestAnimationFrame(frame);const _t0=performance.now();
   if(G.phase==='address'||G.phase==='swing'){if(G.ringDirty)calcRing();if(G.ring){const r=G.ring;S.ring=[r.x,r.y,r.r,.9];S.aim=[G.ball.x,G.ball.y,r.x,r.y]}}
   if(G.phase==='putt'){S.putt=1;const ft=(G.sw&&G.sw.ft)||0;const d=(ft>0?ft:distYd(G.ball,G.H.cup)*3)/3;S.aim=[G.ball.x,G.ball.y,G.ball.x+Math.cos(G.aim)*d,G.ball.y+Math.sin(G.aim)*d]}
   if(G.phase==='flight'&&G.anim.put)S.putt=.5;
-  if((G.phase==='flight'||G.phase==='replay')&&!G.anim.put&&G.tracerOn){const a=G.anim;const k=Math.min(a.flightN,Math.floor(a.t*60)+1);if(k>=2){const tmp=a.P.subarray(0,k*3).slice();tmp[(k-1)*3]=bp[0];tmp[(k-1)*3+1]=bp[1];tmp[(k-1)*3+2]=bp[2];glTracer(G.R,tmp,k,G.cam.eye,1)}}
+  if((G.phase==='flight'||G.phase==='replay')&&G.anim&&(G.tracerOn||G.anim.put)){// trail = the ball's real sampled path (flight, then roll / putt break), head pinned to the interpolated ball position
+    const a=G.anim;const k=Math.min(a.n,2999,Math.floor(a.t*60)+2);if(k>=2){const tmp=a.P.subarray(0,k*3).slice();tmp[(k-1)*3]=bp[0];tmp[(k-1)*3+1]=bp[1];tmp[(k-1)*3+2]=bp[2];glTracer(G.R,tmp,k,G.cam.eye,1,a.put?0:(a.flightN||k),G.H)}}
   S.tracerHead=1;S.ballBoost=G.phase==='flight'?1.6:1;
   resize();glDraw(G.R,G.cam,S);
   G.VP=G.R.lastVP;
@@ -1511,7 +1564,7 @@ function showMenu(){const sv=store('ts.round');const R=recLoad();const st=R.stat
   <div class="menu">${res}
    <button class="btn${res?' alt':''}" id="mPlay">Play a course<small>Lookaway (home) + Golf Digest top 25 · 18 / front 9 / back 9</small></button>
    <button class="btn alt" id="mRange">Driving range<small>Distance flags · dispersion · My Bag gapping</small></button>
-   <button class="btn alt" id="mCtp">Closest to the pin<small>Today: ${esc(ctpToday().label)} · 5 balls</small></button>
+   <button class="btn alt" id="mCtp">Closest to the pin<small>Today: ${esc((G.menuCtp=ctpToday()).label)} · 5 balls</small></button>
    <button class="btn alt" id="mLd">Long drive<small>Today's wind: ${ldToday().wind.mph} mph · 6 balls</small></button>
    <button class="btn alt" id="mRec">My records<small>${st.rounds} rounds · longest drive ${st.longest||'—'} yds · aces ${st.aces}</small></button>
    <button class="btn alt c" id="mHow">How to play</button>
@@ -1532,7 +1585,7 @@ function showSelect(){const R=recLoad();const home=COURSES.filter(c=>c.home),top
   <div class="cards">${home.map(c=>courseCard(c,R)).join('')}</div><div class="sec">Golf Digest · America's 100 Greatest (2025-26) · Top 25</div><div class="cards">${top.map(c=>courseCard(c,R)).join('')}</div>
   <div class="disc">Fan-made; layouts approximate; not affiliated with any club.</div></div>`);
   $('sb').onclick=showMenu;s.querySelectorAll('.cc').forEach(b=>b.onclick=()=>showSetup(b.dataset.id))}
-function showSetup(cid){const c=CID[cid];if(!c||!c.tees||!c.tees.length){showSelect();return}let tee=0,part=2,np=1,gm=+(store('ts.gimme')||0),crw=(()=>{const v=store('ts.crowd');return v===null||v===undefined?2:+v})(),tod=todKey();const names=[ownerName(),...((store('ts.players')||[]).slice(-3).reverse())];while(names.length<4)names.push('Player '+(names.length+1));const tot=t=>c.tees[t].y.reduce((a,b)=>a+b,0);
+function showSetup(cid){const c=CID[cid];if(!c||!c.tees||!c.tees.length){showSelect();return}let tee=0,part=2,np=1,gm=+(store('ts.gimme')||0),crw=(()=>{const v=store('ts.crowd');return v===null||v===undefined?2:+v})(),pinS=pinIn()?1:0,tod=todKey();const names=[ownerName(),...((store('ts.players')||[]).slice(-3).reverse())];while(names.length<4)names.push('Player '+(names.length+1));const tot=t=>c.tees[t].y.reduce((a,b)=>a+b,0);
   const draw=()=>{const s=show('scSetup',`<div class="pn"><div class="hdr"><button class="ib" id="ub">‹</button><h2 style="font-size:18px">${esc(c.name)}</h2></div>
    <div class="lo" style="opacity:.75;font-size:13px">${c.home?'<span class="badge" style="margin:0 6px 0 0">HOME COURSE</span>':'#'+c.rank+' · '}${esc(c.loc)}</div>
    <div class="sec">Tee box</div><div class="seg" id="tees">${c.tees.map((t,i)=>`<button data-i="${i}" class="${i===tee?'sel':''}">${esc(t.n)}<small>${tot(i).toLocaleString()} yds${t.par?' · par '+t.par.reduce((a,b)=>a+b,0):''}</small></button>`).join('')}</div>
@@ -1540,13 +1593,13 @@ function showSetup(cid){const c=CID[cid];if(!c||!c.tees||!c.tees.length){showSel
    <div class="sec">Players · pass and play</div><div class="seg" id="np">${[1,2,3,4].map(k=>`<button data-i="${k}" class="${k===np?'sel':''}">${k===1?'Solo':k+' players'}</button>`).join('')}</div>
    <div class="sec">Time of day</div><div class="seg" id="tod">${Object.keys(TOD).map(k=>`<button data-k="${k}" class="${k===tod?'sel':''}">${TOD[k].n}</button>`).join('')}</div>
    <div class="sec">Gimmes</div><div class="seg" id="gm">${[0,2,3].map(k=>`<button data-i="${k}" class="${k===gm?'sel':''}">${k?k+' ft':'Off'}</button>`).join('')}</div>${gm?'<div class="gnote">Gimmes on, no records. Putts inside '+gm+' ft are conceded for +1 stroke.</div>':''}
-   <div class="sec">Crowd &amp; ambience</div><div class="seg" id="crw">${['Off','Low','Medium','High'].map((n,i)=>`<button data-i="${i}" class="${i===crw?'sel':''}">${n}</button>`).join('')}</div>
+   <div class="sec">Flagstick</div><div class="seg" id="pinS">${['Pin out','Pin in'].map((n,i)=>`<button data-i="${i}" class="${i===pinS?'sel':''}">${n}</button>`).join('')}</div><div class="sec">Crowd &amp; ambience</div><div class="seg" id="crw">${['Off','Low','Medium','High'].map((n,i)=>`<button data-i="${i}" class="${i===crw?'sel':''}">${n}</button>`).join('')}</div>
    <div class="pls">${Array.from({length:np},(_,k)=>`<label><span>${k===0?'You (profile owner)':'Player '+(k+1)}</span><input data-k="${k}" maxlength="16" value="${esc(names[k])}"></label>`).join('')}</div>
    <div class="scr">${cardHTML(c,tee,0,18,null,null)}</div>
    ${Object.keys(c.sig||{}).length?`<div class="sec">Signature holes</div><div style="font-size:13px;opacity:.85">${Object.entries(c.sig).map(([h,l])=>'#'+h+' '+esc(l)).join(' · ')}</div>`:''}
    <button class="btn c" id="go" style="margin-top:14px">Tee off</button><button class="btn alt c" id="gr">My records here</button>
    <div class="disc">Fan-made; layouts approximate; not affiliated with any club.<br>Scorecard: ${esc(c.src||'')}</div></div>`);
-   s.querySelector('#tees').onclick=e=>{const b=e.target.closest('button');if(b){tee=+b.dataset.i;draw()}};s.querySelector('#parts').onclick=e=>{const b=e.target.closest('button');if(b){part=+b.dataset.i;draw()}};s.querySelector('#np').onclick=e=>{const b=e.target.closest('button');if(b){np=+b.dataset.i;draw()}};s.querySelector('#tod').onclick=e=>{const b=e.target.closest('button');if(b){tod=b.dataset.k;store('ts.tod',tod);draw()}};s.querySelector('#gm').onclick=e=>{const b=e.target.closest('button');if(b){gm=+b.dataset.i;store('ts.gimme',gm);draw()}};s.querySelector('#crw').onclick=e=>{const b=e.target.closest('button');if(b){crw=+b.dataset.i;store('ts.crowd',crw);draw()}};s.querySelectorAll('.pls input').forEach(inp=>inp.oninput=()=>{names[+inp.dataset.k]=inp.value});
+   s.querySelector('#tees').onclick=e=>{const b=e.target.closest('button');if(b){tee=+b.dataset.i;draw()}};s.querySelector('#parts').onclick=e=>{const b=e.target.closest('button');if(b){part=+b.dataset.i;draw()}};s.querySelector('#np').onclick=e=>{const b=e.target.closest('button');if(b){np=+b.dataset.i;draw()}};s.querySelector('#tod').onclick=e=>{const b=e.target.closest('button');if(b){tod=b.dataset.k;store('ts.tod',tod);draw()}};s.querySelector('#gm').onclick=e=>{const b=e.target.closest('button');if(b){gm=+b.dataset.i;store('ts.gimme',gm);draw()}};s.querySelector('#crw').onclick=e=>{const b=e.target.closest('button');if(b){crw=+b.dataset.i;store('ts.crowd',crw);draw()}};s.querySelector('#pinS').onclick=e=>{const b=e.target.closest('button');if(b){pinS=+b.dataset.i;setPin(!!pinS);draw()}};s.querySelectorAll('.pls input').forEach(inp=>inp.oninput=()=>{names[+inp.dataset.k]=inp.value});
    $('ub').onclick=showSelect;$('gr').onclick=()=>showRecords(cid);$('go').onclick=()=>{store('ts.round',null);const nm=names.slice(0,np).map((x,k)=>(x||'').trim()||(k?'Player '+(k+1):'James'));for(let k=1;k<nm.length;k++){while(nm.slice(0,k).some(z=>z.toLowerCase()===nm[k].toLowerCase()))nm[k]+='+'}if(nm[0])store('ts.owner',nm[0]);startRound(cid,tee,part===1?9:0,part===2?18:9,nm.map((x,k)=>({name:x,owner:k===0})),gm,tod)}};draw()}
 function scCls(s,p){if(!s)return'';const d=s-p;return s===1?'sc-ea':d<=-2?'sc-ea':d===-1?'sc-b':d===0?'':d===1?'sc-bo':'sc-db'}
 function cardHTML(c,tee,start,n,sc,pt){const rows=[];const halves=[];for(let h=0;h<18;h+=9){const idx=[];for(let i=h;i<h+9;i++)if(i>=start&&i<start+n)idx.push(i);if(idx.length)halves.push(idx)}
@@ -1596,7 +1649,7 @@ const LD_C={id:'ld',name:'Long Drive Grid',par:[4],tees:[{n:'Grid',y:[420]}],sty
 function ldGeo(){const rect=(x0,y0,x1,y1)=>enc([[x0,y0],[x1,y0],[x1,y1],[x0,y1]]);return{h:[{l:enc([[0,0],[0,440]])}],f:{gc:[rect(-48,-25,48,470)],fw:[rect(-30,140,30,445)],ro:[rect(-48,-25,48,470)],te:[rect(-10,-6,10,5)],wd:[rect(-80,-25,-60,470),rect(60,-25,80,470)]},t:[]}}
 function modeHUD(title,short,sub,score,bar){G.modeTitle=title;G.modeShort=short;G.modeSub=sub;G.modeScore=score;const m=$('modeBar');if(bar){m.innerHTML=bar;m.classList.remove('hide')}else m.classList.add('hide');updHUD()}
 function startMode(mode,course,geo,opts){G.round=null;G.mode=mode;hideScreens();$('hud').classList.add('on');$('next').style.display='none';clearLabels();
-  const H=buildHole(course,geo,0,0,opts||{});if(opts&&opts.cup)H.cup=opts.cup;setHole(H,opts&&opts.flags);G.ball={x:0,y:0,surf:S_TEE};G.strokes=0;G.pen=0;G.lm=null;G.R.tracerN=0;carryReset();G.onHoled=null;G.onShot=null;G.onRest=null;return H}
+  const H=buildHole(course,geo,(opts&&opts.hi)||0,(opts&&opts.tee)||0,opts||{});if(opts&&opts.cup)H.cup=opts.cup;setHole(H,opts&&opts.flags);G.ball={x:0,y:0,surf:S_TEE};G.strokes=0;G.pen=0;G.lm=null;G.R.tracerN=0;carryReset();G.onHoled=null;G.onShot=null;G.onRest=null;return H}
 // ---- range ----
 function startRange(){const H=startMode('range',RANGE_C,rangeGeo(),{flags:null});G.flags=RANGE_FLAGS.map(([x,y],i)=>({x,y,col:[[.9,.15,.1],[1,.8,.1],[.15,.5,.95],[.95,.95,.95],[.9,.15,.1],[1,.8,.1]][i]}));G.cupOn=false;
   G.target={x:0,y:150};G.wind={x:0,y:0,mph:0,a:0};G.allowed=null;G.labels=RANGE_FLAGS.map(([x,y])=>({x,y,t:y+' yds',z:3.2}));
@@ -1624,16 +1677,17 @@ function drawRangePanel(){const c=$('rangeC'),g=c.getContext('2d'),W=c.width,H=c
     g.font='800 24px Helvetica,Arial,sans-serif';st.forEach(([k,v],i)=>{const x=(i%2)*W/2+14,y=50+Math.floor(i/2)*150;g.fillStyle='rgba(255,255,255,.6)';g.font='800 17px Helvetica,Arial,sans-serif';g.fillText(k.toUpperCase(),x,y);g.fillStyle='#fff';g.font='900 40px Helvetica,Arial,sans-serif';g.fillText(v,x,y+46)})}}
 // ---- closest to the pin (daily seeded par 3) ----
 const CTP_POOL=[['augusta',12],['augusta',16],['augusta',4],['cypress',16],['cypress',15],['pebble',7],['pebble',17],['pinevalley',5],['pinevalley',10],['oakmont',6],['shinnecock',11],['merion',17],['ngla',13],['sandhills',13],['fishers',5],['seminole',17],['pacificdunes',11],['riviera',6],['lacc',11],['lookaway',3]];
-function ctpToday(){const R=RNG('ctp'+todayKey());const pool=CTP_POOL.filter(([c,h])=>CID[c]&&CID[c].par[h-1]===3);const [cid,h]=pool[R.int(pool.length)];const c=CID[cid];return{cid,h,label:c.name.replace(/ (Golf|Country) Club.*$/,'').replace(/ National.*$/,' National')+' #'+h,wind:windFor('ctpw'+todayKey())}}
-function startCtp(){const T=ctpToday();const c=CID[T.cid];const H=startMode('ctp',c,GEO[c.id],{cupSeed:'ctp'+todayKey()});
+function ctpToday(){const R=RNG('ctp'+todayKey());const pool=CTP_POOL.filter(([c,h])=>CID[c]&&CID[c].par[h-1]===3);const [cid,h]=pool[R.int(pool.length)];const c=CID[cid];return{cid,h,key:todayKey(),label:c.name.replace(/ (Golf|Country) Club.*$/,'').replace(/ National.*$/,' National')+' #'+h,wind:windFor('ctpw'+todayKey())}}
+function startCtp(){// play exactly the hole the menu announced (same day key even if the menu sat open past midnight)
+  const T=(G.menuCtp&&CID[G.menuCtp.cid])?G.menuCtp:ctpToday();const c=CID[T.cid];const H=startMode('ctp',c,GEO[c.id],{cupSeed:'ctp'+T.key,hi:T.h-1,tee:0});G.ctpT=T;
   G.wind=T.wind;G.allowed=CN.map((_,i)=>i).slice(0,13);G.cupOn=true;G.ballsLeft=5;G.ctpRes=[];G.extraBalls=[];G.labels=null;G.target=null;
   const bar=()=>`CLOSEST TO THE PIN · BALL ${Math.min(5,6-G.ballsLeft)}/5<small>Best ${G.ctpRes.length?fmtFt(Math.min(...G.ctpRes)):'—'} · today's hole: ${esc(T.label)}</small>`;
   G.onRest=(res,msg)=>{const d=res.kind==='sunk'?0:msg?null:distYd(G.ball,H.cup);G.ctpRes.push(d===null?99:d);if(d!==null&&d<99)G.extraBalls.push({x:G.ball.x,y:G.ball.y,z:H.hAt(G.ball.x,G.ball.y)});
     toast(d===null?'NO SCORE':d===0?'ACE!':fmtFt(d),d===null?'Missed the green complex':H.surfAt(G.ball.x,G.ball.y)===S_GREEN?'On the green':'Off the green',1700)};
   G.onHoled=()=>{G.phase='rest';G.restT=0;G.onRest({kind:'sunk'})};
-  G.afterRest=()=>{G.ballsLeft--;if(G.ballsLeft<=0){ctpDone(T);return}G.ball={x:0,y:0,surf:S_TEE};G.strokes=0;setAddress();modeHUD('Closest to the Pin','CTP',`${H.yards} yds · Par 3`,G.ctpRes.length?fmtFt(Math.min(...G.ctpRes)):'—',bar())};
-  G.modeTitle='Closest to the Pin';modeHUD('Closest to the Pin','CTP',`${H.yards} yds · Par 3`,'—',bar());startIntro()}
-function ctpDone(T){const best=Math.min(...G.ctpRes);const R=recLoad();const k=todayKey();const valid=best<99;
+  G.afterRest=()=>{G.ballsLeft--;if(G.ballsLeft<=0){ctpDone(T);return}G.ball={x:0,y:0,surf:S_TEE};G.strokes=0;setAddress();modeHUD('Closest to the Pin','CTP',`${H.yards} yds · Par 3 · ${esc(c.tees[0].n)} tees`,G.ctpRes.length?fmtFt(Math.min(...G.ctpRes)):'—',bar())};
+  G.modeTitle='Closest to the Pin';modeHUD('Closest to the Pin','CTP',`${H.yards} yds · Par 3 · ${esc(c.tees[0].n)} tees`,'—',bar());startIntro()}
+function ctpDone(T){const best=Math.min(...G.ctpRes);const R=recLoad();const k=T.key||todayKey();const valid=best<99;
   if(valid){if(R.ctp.best===null||best<R.ctp.best)R.ctp.best=best;if(R.ctp.day[k]===undefined||best<R.ctp.day[k])R.ctp.day[k]=best;recSave(R)}
   G.phase='done';show('scCard',`<div class="pn"><div class="hdr"><h2>Closest to the pin</h2></div><div style="font-weight:800">${esc(T.label)} · ${G.H.yards} yds · wind ${T.wind.mph} mph</div>
    <div class="stt"><div><b>${valid?fmtFt(best):'—'}</b><span>Best today (this go)</span></div><div><b>${R.ctp.day[k]!==undefined?fmtFt(R.ctp.day[k]):'—'}</b><span>Best today</span></div><div><b>${R.ctp.best!==null?fmtFt(R.ctp.best):'—'}</b><span>All-time</span></div></div>
@@ -1834,13 +1888,16 @@ const _finishRoundC=finishRound;finishRound=function(){const r=G.round?JSON.pars
 
 /* ---------- time of day (Morning / Midday / Sunset): lighting only, physics untouched ---------- */
 const TOD={
-  morning:{n:'Morning',sun:[-.72,.62,.2],sunCol:[1.6,1.36,1.06],skyTop:[.2,.4,.78],skyHor:[.80,.84,.88],fog:[.82,.84,.86],far:[.15,.22,.17],fogMul:.55,mist:1},
-  midday:{n:'Midday',sun:[.44,-.6,.47],sunCol:[1.0,.88,.70],skyTop:[.26,.47,.80],skyHor:[.62,.74,.90],fog:[.60,.71,.86],far:[.17,.27,.14],fogMul:.17,mist:0},
-  sunset:{n:'Sunset',sun:[.85,.45,.16],sunCol:[2.6,1.3,.5],skyTop:[.22,.32,.6],skyHor:[1.0,.55,.32],fog:[.9,.6,.42],far:[.13,.17,.10],fogMul:.8}};
+  morning:{n:'Morning',az:100,el:13,sun:[-.72,.62,.2],sunCol:[1.6,1.36,1.06],skyTop:[.2,.4,.78],skyHor:[.80,.84,.88],fog:[.82,.84,.86],far:[.15,.22,.17],fogMul:.55,mist:1},
+  midday:{n:'Midday',az:185,el:50,sun:[.44,-.6,.47],sunCol:[1.0,.88,.70],skyTop:[.26,.47,.80],skyHor:[.62,.74,.90],fog:[.60,.71,.86],far:[.17,.27,.14],fogMul:.17,mist:0},
+  sunset:{n:'Sunset',az:262,el:9,sun:[.85,.45,.16],sunCol:[2.6,1.3,.5],skyTop:[.22,.32,.6],skyHor:[1.0,.55,.32],fog:[.9,.6,.42],far:[.13,.17,.10],fogMul:.8}};
 function todKey(){const k=store('ts.tod');return TOD[k]?k:'midday'}
-function applyTOD(k){const t=TOD[k]||TOD.midday;const l=Math.hypot(...t.sun);for(let i=0;i<3;i++)SUN_FRAME[i]=t.sun[i]/l;
+function sunVec(t,H){// real compass placement: morning low in the east, midday high in the south, sunset low in the west; rotated into the hole frame (raw x=east, y=north)
+  if(!H||typeof H.rot!=='number'||t.az===undefined){const l=Math.hypot(...t.sun);return t.sun.map(v=>v/l)}
+  const az=t.az*Math.PI/180,el=t.el*Math.PI/180,e=Math.sin(az)*Math.cos(el),n=Math.cos(az)*Math.cos(el),cr=Math.cos(H.rot),sr=Math.sin(H.rot);return[e*cr-n*sr,e*sr+n*cr,Math.sin(el)]}
+function applyTOD(k,H){const t=TOD[k]||TOD.midday;const v=sunVec(t,H);for(let i=0;i<3;i++)SUN_FRAME[i]=v[i];
   LIGHT.sunCol=t.sunCol.slice();LIGHT.skyTop=t.skyTop.slice();LIGHT.skyHor=t.skyHor.slice();LIGHT.fog=t.fog.slice();LIGHT.far=t.far.slice();LIGHT.fogMul=t.fogMul;LIGHT.mist=t.mist||0;G.tod=k}
-const _setHoleT=setHole;setHole=function(H,f){applyTOD(G.mode==='round'&&G.round&&G.round.tod?G.round.tod:todKey());return _setHoleT(H,f)};
+const _setHoleT=setHole;setHole=function(H,f){applyTOD(G.mode==='round'&&G.round&&G.round.tod?G.round.tod:todKey(),H);return _setHoleT(H,f)};
 
 /* water hazard options: after a ball comes to rest in a penalty area, pick how to take relief (+1 stroke in every case) */
 const PEN_DZ={'augusta:11':1,'augusta:14':1,'augusta:15':1};// holes with a designated drop zone (placed short of the hazard on the play line)
@@ -1986,6 +2043,26 @@ const _finishShotCr=finishShot;finishShot=function(){const a=G.anim,H=G.H;let in
 /* ambient on during play, off in menus; start on the first user gesture (autoplay rules) */
 setInterval(()=>{try{const want=G.mode&&G.mode!=='menu'&&G.phase!=='menu'&&crowdLevel()>0&&AC&&AC.state==='running';if(want&&!CRW.amb)ambStart();else if(!want&&CRW.amb)ambStop();if(CRW.master&&AC)CRW.master.gain.setTargetAtTime(crowdLevel(),AC.currentTime,.1)}catch(e){}},500);
 addEventListener('pointerdown',()=>{crAC()},{once:true});addEventListener('keydown',()=>{crAC()},{once:true});
+
+/* swing prompt ("TAP, CLICK OR PRESS SPACE TO SWING") only on the opening drive of a round (first player, hole 1, first stroke) or the first ball of a practice/challenge mode */
+function swingHintOn(){if((G.shotN||0)>0)return false;if(G.mode!=='round')return true;const r=G.round;if(!r||r.i!==0||G.strokes!==0||G.ball.surf!==S_TEE)return false;if(isMP()&&G.mpH&&!G.mpH.every(s=>s.strokes===0))return false;return true}
+{const _ex=executeShot;executeShot=function(){G.shotN=(G.shotN||0)+1;return _ex.apply(this,arguments)};
+ const _sr=startRound;startRound=function(){G.shotN=0;return _sr.apply(this,arguments)};
+ const _sm=startMode;startMode=function(){G.shotN=0;return _sm.apply(this,arguments)};
+ const _rr=resumeRound;resumeRound=function(){G.shotN=0;return _rr.apply(this,arguments)};}
+
+/* flagstick in / out (ts.pin, remembered; default in). Pin in: the cup physics lets a firm putt that hits the stick drop; pin out: the stick is removed while putting. */
+function pinIn(){const v=store('ts.pin');return v!=='out'}
+function setPin(on){store('ts.pin',on?'in':'out');if(G.H&&G.H.cup)G.H.cup.pin=!!on;updPinBtn()}
+function updPinBtn(){const b=$('pinT');if(b){b.textContent=pinIn()?'PIN IN':'PIN OUT';b.classList.toggle('out',!pinIn())}}
+(function(){const host=$('putt');if(!host)return;const b=document.createElement('button');b.id='pinT';b.type='button';b.style.cssText='display:none;pointer-events:auto;margin-top:6px;font:800 11px/1 inherit;letter-spacing:.06em;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.35);color:#fff;cursor:pointer';
+  const stop=e=>{e.stopPropagation()};b.addEventListener('pointerdown',stop);b.addEventListener('mousedown',stop);b.addEventListener('touchstart',stop,{passive:true});b.addEventListener('keydown',e=>{if(e.code==='Space')e.preventDefault()});
+  b.onclick=e=>{e.stopPropagation();setPin(!pinIn());b.blur()};host.appendChild(b);updPinBtn()})();
+{const _sh=setHole;setHole=function(H){const r=_sh.apply(this,arguments);try{if(H&&H.cup)H.cup.pin=pinIn();updPinBtn()}catch(e){}return r}}
+function pinHidden(){return !pinIn()&&G.mode!=='menu'&&(G.phase==='putt'||((G.phase==='flight'||G.phase==='replay')&&G.anim&&G.anim.put))}
+/* the Pin In / Pin Out toggle shows only while a putt is being set up (putting view), hidden for every other shot and screen */
+function pinBtnWanted(){return G.mode&&G.mode!=='menu'&&G.phase==='putt'&&!G.replay}
+(function pinBtnLoop(){try{const b=$('pinT');if(b){const w=pinBtnWanted();const d=w?'inline-block':'none';if(b.style.display!==d)b.style.display=d}}catch(e){}requestAnimationFrame(pinBtnLoop)})();
 
 </script>
 </body>
