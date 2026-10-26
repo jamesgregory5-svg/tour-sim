@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.13';
+const VERSION='v1.14';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -413,8 +413,8 @@ function demSample(id,x,y){const D=DEMS[id];if(!D)return 0;const h=demGrid(D,x,y
 // species: h = height range (yd), w = width/height ratio, cb = crown base (fraction of height), cr = collision radius factor
 const SPECIES=[
   {n:'loblolly',h:[21,30],w:.42,cb:.44},
-  {n:'oak',h:[15,21],w:1.0,cb:.3},
-  {n:'maple',h:[14,19],w:.78,cb:.3},
+  {n:'oak',h:[17,25],w:1.0,cb:.3},
+  {n:'maple',h:[16,23],w:.78,cb:.3},
   {n:'cypress',h:[10,15],w:1.25,cb:.35},
   {n:'palm',h:[12,20],w:.62,cb:.78},
   {n:'dogwood',h:[6,8.5],w:1.05,cb:.3},
@@ -430,59 +430,75 @@ function paintTreeAtlas(){
   for(let sp=0;sp<SPECIES.length;sp++)for(let v=0;v<ATL.nv;v++){const cell=sp*ATL.nv+v,cx=(cell%ATL.cols)*ATL.cw,cy=Math.floor(cell/ATL.cols)*ATL.ch;g.save();g.scale(TS,TS);g.beginPath();g.rect(cx,cy,ATL.cw,ATL.ch);g.clip();g.translate(cx,cy);paintTree(g,sp,v,RNG('tree'+sp+'_'+v));g.restore()}
   return c}
 function hsl(h,s,l,a){return`hsla(${h},${s}%,${l}%,${a===undefined?1:a})`}
-function clump(g,x,y,r,hue,sat,lit,R,dots){// one foliage clump: a denser core plus a ragged fringe of leaf sprays (no smooth blob outline), dark underside, sunlit top
-  // leaves are batched into three light buckets (one path + one fill each) so the atlas paints fast
-  const gr=g.createRadialGradient(x-r*.25,y-r*.45,r*.1,x,y,r*.95);gr.addColorStop(0,hsl(hue,sat,lit+9));gr.addColorStop(.6,hsl(hue,sat,lit));gr.addColorStop(1,hsl(hue+4,sat-6,lit-9));
-  g.fillStyle=gr;g.beginPath();const n=18;for(let i=0;i<=n;i++){const a=i/n*TAU,rr=r*(.5+R()*.38);const px=x+Math.cos(a)*rr,py=y+Math.sin(a)*rr*.86;i?g.lineTo(px,py):g.moveTo(px,py)}g.closePath();g.fill();
-  const nl=Math.min(140,Math.round(r*r*.5)+Math.round((dots||0)*.5));const P=[new Path2D(),new Path2D(),new Path2D()];
-  for(let i=0;i<nl;i++){const a=R()*TAU,d=Math.pow(R(),.6)*r*1.05,px=x+Math.cos(a)*d,py=y+Math.sin(a)*d*.86;const top=(py-y)/r,side=(px-x)/r;
-    const k=top<-.25||(side<-.3&&R()<.5)?0:top>.3?2:(R()<.5?1:R()<.5?0:2);const s=R.range(.9,2.3);P[k].moveTo(px+s,py);P[k].ellipse(px,py,s,s*R.range(.45,.8),R()*3.2,0,TAU)}
-  g.fillStyle=hsl(hue-2,sat+3,lit+8,.92);g.fill(P[0]);g.fillStyle=hsl(hue+2,sat,lit,.9);g.fill(P[1]);g.fillStyle=hsl(hue+5,sat-4,lit-7,.9);g.fill(P[2])}
-function skyHoles(g,cx,cy,rx,ry,n,R){// punch small see-through gaps in a crown so it reads as branches and leaves, not a solid ball
-  g.save();g.globalCompositeOperation='destination-out';for(let i=0;i<n;i++){const a=R()*TAU,d=R.range(.35,.95);const x=cx+Math.cos(a)*rx*d,y=cy+Math.sin(a)*ry*d;const r=R.range(2.5,7.5);
-    g.fillStyle='rgba(0,0,0,'+R.range(.6,1).toFixed(2)+')';g.beginPath();g.ellipse(x,y,r,r*R.range(.5,1),R()*3,0,TAU);g.fill()}g.restore()}
+function clump(g,x,y,r,hue,sat,lit,R,dots){// one foliage mass: lobed silhouette edged with small leaves, shaded top-to-bottom as a volume, filled with near-tone leaf texture (no bright flecks, no dark rim)
+  const lobes=[];const n=6+(R()*4|0);lobes.push([x,y,r*.6]);for(let i=0;i<n;i++){const a=i/n*TAU+R.range(-.3,.3),d=r*R.range(.36,.56);lobes.push([x+Math.cos(a)*d,y+Math.sin(a)*d*.85,r*R.range(.28,.44)])}
+  const P=new Path2D();for(const [a,b,c] of lobes){P.moveTo(a+c,b);P.arc(a,b,c,0,TAU)}
+  // leafy edge: many small leaves straddling the outline so the silhouette is broken up at leaf scale
+  const nf=Math.min(90,Math.round(r*2.2));const ls=Math.max(1.4,r*.075);for(let i=0;i<nf;i++){const a=R()*TAU,L=lobes[1+(R()*n|0)];const d=L[2]*R.range(.85,1.15);const px=L[0]+Math.cos(a)*d,py=L[1]+Math.sin(a)*d;const s=ls*R.range(.7,1.3);P.moveTo(px+s,py);P.ellipse(px,py,s,s*.6,R()*3.2,0,TAU)}
+  const gr=g.createLinearGradient(x-r*.3,y-r,x+r*.3,y+r);gr.addColorStop(0,hsl(hue-3,sat+2,lit+9));gr.addColorStop(.45,hsl(hue,sat,lit+1));gr.addColorStop(1,hsl(hue+4,sat-4,lit-8));
+  g.fillStyle=gr;g.fill(P);
+  g.save();g.clip(P);const A=new Path2D(),B=new Path2D(),C=new Path2D();const nl=Math.min(160,Math.round(r*r*.3));
+  for(let i=0;i<nl;i++){const a=R()*TAU,d=Math.sqrt(R())*r*1.05,px=x+Math.cos(a)*d,py=y+Math.sin(a)*d*.85;const s=ls*R.range(.6,1.1);const top=(py-y)/r;const T=top<-.2?(R()<.6?A:B):top>.25?(R()<.7?C:B):(R()<.5?B:C);T.moveTo(px+s,py);T.ellipse(px,py,s,s*.6,R()*3.2,0,TAU)}
+  g.fillStyle=hsl(hue-3,sat+3,lit+7,.45);g.fill(A);g.fillStyle=hsl(hue+3,sat-2,lit-5,.4);g.fill(B);g.fillStyle=hsl(hue+5,sat-4,lit-11,.45);g.fill(C);
+  // a couple of shaded pockets between lobes give depth
+  const dn=new Path2D();for(let i=0;i<2;i++){const a=Math.PI*.5+R.range(-1.2,1.2),d=r*R.range(.25,.55),rr=r*R.range(.14,.24);const px=x+Math.cos(a)*d,py=y+Math.sin(a)*d*.8;dn.moveTo(px+rr,py);dn.arc(px,py,rr,0,TAU)}g.fillStyle=hsl(hue+6,sat-4,lit-12,.3);g.fill(dn);g.restore()}
+function skyHoles(g,cx,cy,rx,ry,n,R){// irregular see-through gaps (clusters of small leaf-shaped cuts), never clean round holes
+  g.save();g.globalCompositeOperation='destination-out';g.fillStyle='#000';const m=Math.round(n*.3);for(let i=0;i<m;i++){const a=R()*TAU,d=R.range(.3,.8);const x=cx+Math.cos(a)*rx*d,y=cy+Math.sin(a)*ry*d;const k=4+(R()*5|0);
+    g.beginPath();for(let j=0;j<k;j++){const qx=x+R.range(-6,6),qy=y+R.range(-4,4),r=R.range(1.5,3.5);g.moveTo(qx+r,qy);g.ellipse(qx,qy,r,r*.6,R()*3,0,TAU)}g.fill()}g.restore()}
 function trunk(g,x0,y0,x1,y1,w0,w1,col,dark){const nx=-(y1-y0),ny=x1-x0,l=Math.hypot(nx,ny)||1;const ux=nx/l,uy=ny/l;
-  const gr=g.createLinearGradient(x0-w0,0,x0+w0,0);gr.addColorStop(0,col);gr.addColorStop(.6,col);gr.addColorStop(1,dark);g.fillStyle=gr;
-  g.beginPath();g.moveTo(x0+ux*w0,y0+uy*w0);g.lineTo(x1+ux*w1,y1+uy*w1);g.lineTo(x1-ux*w1,y1-uy*w1);g.lineTo(x0-ux*w0,y0-uy*w0);g.closePath();g.fill();
-  // bark: vertical fissures and plates, darker on the shaded side, lighter flecks on the lit side
+  // round-shaded tapered stem: lit on the left, core shadow on the right, slight flare at the base
+  const gr=g.createLinearGradient(x0+ux*w0,y0+uy*w0,x0-ux*w0,y0-uy*w0);gr.addColorStop(0,dark);gr.addColorStop(.35,col);gr.addColorStop(.6,col);gr.addColorStop(1,dark);g.fillStyle=gr;
+  g.beginPath();g.moveTo(x0+ux*w0,y0+uy*w0);g.quadraticCurveTo((x0+x1)/2+ux*(w0+w1)*.5,(y0+y1)/2+uy*(w0+w1)*.5,x1+ux*w1,y1+uy*w1);g.lineTo(x1-ux*w1,y1-uy*w1);g.quadraticCurveTo((x0+x1)/2-ux*(w0+w1)*.5,(y0+y1)/2-uy*(w0+w1)*.5,x0-ux*w0,y0-uy*w0);g.closePath();g.fill();
+  // bark: long dark vertical fissures only (no light flecks)
   const L=Math.hypot(x1-x0,y1-y0);let sd=(x0*73+y0*31+L*7)|0;const rn=()=>{sd=(sd*1103515245+12345)&0x7fffffff;return sd/0x7fffffff};
-  for(let k=0;k<L*Math.max(w0,w1)*.09;k++){const t=rn(),wt=w0+(w1-w0)*t,o=(rn()*2-1)*wt*.85;const px=x0+(x1-x0)*t+ux*o,py=y0+(y1-y0)*t+uy*o;const ln=2+rn()*7;
-    g.strokeStyle=o>wt*.2?'rgba(20,14,10,'+(.25+rn()*.3).toFixed(2)+')':rn()<.5?'rgba(25,18,12,.28)':'rgba(255,245,225,.13)';g.lineWidth=.6+rn()*1.1;g.beginPath();g.moveTo(px,py);g.lineTo(px+(x1-x0)/L*ln+(rn()-.5),py+(y1-y0)/L*ln);g.stroke()}}
+  if(Math.max(w0,w1)>2.5){g.strokeStyle='rgba(18,13,9,.32)';g.lineWidth=.9;g.beginPath();for(let k=0;k<L*Math.max(w0,w1)*.03;k++){const t=rn(),wt=w0+(w1-w0)*t,o=(rn()*2-1)*wt*.75;const px=x0+(x1-x0)*t+ux*o,py=y0+(y1-y0)*t+uy*o;const ln=4+rn()*10;
+    g.moveTo(px,py);g.lineTo(px+(x1-x0)/L*ln+(rn()-.5)*1.5,py+(y1-y0)/L*ln)}g.stroke()}}
+function limbs(g,x,y,ang,len,w,depth,R,spread,tips,col,dark,up){// recursive forked branching: each limb curves, tapers and splits into 2-3 children
+  const bend=R.range(-.25,.25);const ex=x+Math.cos(ang)*len,ey=y+Math.sin(ang)*len;const w1=w*.62;
+  trunk(g,x,y,ex,ey,w,w1,col,dark);
+  if(depth<=0){tips.push([ex,ey,len]);return}
+  const nk=depth>=2?2+(R()<.5?1:0):2;for(let i=0;i<nk;i++){const a=ang+(i/(nk-1)-.5)*spread*R.range(.8,1.2)+bend;const aa=a+(-Math.PI/2-a)*(up||0);limbs(g,ex,ey,aa,len*R.range(.62,.8),w1,depth-1,R,spread*.85,tips,col,dark,up)}}
 function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECIES[sp];
   const th=S.thpx,tw=th*S.w*.94;const hv=R()*8-4;
-  if(sp===0||sp===7){// pines: tall bare trunk, sparse layered branch tiers of needle pads with sky gaps between them
-    const cb=(sp===0?.5:.36)+[0,-.06,.05,-.1,.08,-.03,.02,-.08][v];const side=v%3===1?(R()<.5?-1:1):0;/* some crowns lopsided */const tx=R.range(-5,5);trunk(g,bx,by,bx+tx,by-th*.98,8,2.5,['#6b5646','#5f4d3f','#735b49','#665244'][v&3],'#2b2119');
-    const hue=sp===0?96+hv:104+hv;const tiers=sp===0?8+Math.floor(R()*3):7+Math.floor(R()*3);
-    const pad=(x,y,len,dir,droop,sc)=>{// one branch: limb + needle spray along it
-      g.strokeStyle='#3a2b20';g.lineWidth=2.2*sc;g.beginPath();g.moveTo(x,y);g.quadraticCurveTo(x+dir*len*.5,y-4*sc,x+dir*len,y+droop);g.stroke();
-      const nn=Math.round(len*2.1);for(let k=0;k<nn;k++){const u=.15+.85*R(),px=x+dir*len*u,py=y-4*sc*u*(1-u)*2+droop*u*u+R.range(-5,3)*sc;
-        const lit=u>.4&&R()<.55?27:16;g.strokeStyle=hsl(hue+R.range(-6,6),26+R()*10,lit+R.range(-4,6),.9);g.lineWidth=1.1;
-        for(let q=0;q<3;q++){const an=-Math.PI/2+R.range(-1.3,1.3);const l=R.range(4,9)*sc;g.beginPath();g.moveTo(px,py);g.lineTo(px+Math.cos(an)*l,py+Math.sin(an)*l*.8);g.stroke()}}
-      // needle tufts give each pad volume and an uneven outline (not a flat disc)
-      for(let k=0;k<len*.22+3;k++){const u=.15+.85*R();clump(g,x+dir*len*u+R.range(-5,5),y-5*sc+droop*u*u+R.range(-16,6)*sc,R.range(7,13.5)*sc,hue+R.range(-6,6),24,16+R.range(-3,6),R,5)}
-      // sunlit top rim of the pad
-      g.fillStyle=hsl(hue-4,30,33,.55);for(let k=0;k<len*.35;k++){const u=.3+.7*R();g.beginPath();g.ellipse(x+dir*len*u,y-5*sc+droop*u*u,R.range(1,2.4),R.range(.6,1.4),0,0,TAU);g.fill()}};
-    for(let i=0;i<tiers;i++){const f=(i+R.range(-.25,.25))/tiers;const y=by-th*(cb+f*(1-cb)*.95);const x=bx+tx*(by-y)/th;
-      const env=sp===0?(.45+.55*Math.sin(Math.PI*Math.min(1,.15+f*1.05))):(1-f*.7);if(i>1&&i<tiers-2&&R()<.22)continue;const len=tw*.5*env*R.range(.5,1.2),sc=1.1-f*.35;const ls=side<0?1.35:side>0?.6:1,rs=side>0?1.35:side<0?.6:1;
-      if(R()<.92)pad(x,y,len*ls,-1,R.range(0,12),sc);if(R()<.92)pad(x,y+R.range(-10,10),len*R.range(.65,1)*rs,1,R.range(0,12),sc)}
-    // crown top tuft
-    for(let k=0;k<3;k++)pad(bx+tx,by-th*.95+k*6,tw*.12,k%2?1:-1,2,.8)}
-  else if(sp===1||sp===2){// oak / maple: visible trunk + limbs, broad crown of many clumps
-    trunk(g,bx,by,bx+R.range(-4,4),by-th*.45,14,7,'#5d5146','#28201a');
-    // irregular crown: limbs fork to 5-7 sub-crowns with sky gaps between them, ragged leaf fringe instead of one round ball
-    const hue=(sp===1?92:84)+hv,cyc=by-th*(sp===1?.6:.6),rx=tw*.47,ry=th*(sp===1?.4:.42);const ends=[];const nb=5+(R()*3|0);
-    g.strokeStyle='#3b2d22';g.lineCap='round';for(let i=0;i<nb;i++){const a=-Math.PI/2+(i/(nb-1)-.5)*2.4+R.range(-.2,.2),d=R.range(.55,1);const ex=bx+Math.cos(a)*rx*d,ey=cyc+Math.sin(a)*ry*d*.9+ry*.15;ends.push([ex,ey,R.range(.6,1)]);
-      g.lineWidth=R.range(3,6);g.beginPath();g.moveTo(bx,by-th*.38);g.quadraticCurveTo(bx+(ex-bx)*.4+R.range(-8,8),by-th*.5,ex,ey);g.stroke();g.lineWidth=1.6;for(let k=0;k<2;k++){g.beginPath();g.moveTo(bx+(ex-bx)*.7,ey+(by-th*.45-ey)*.3);g.lineTo(ex+R.range(-22,22),ey+R.range(-22,6));g.stroke()}}
-    for(let pass=0;pass<3;pass++)for(const [ex,ey,sz] of ends){const n=pass===0?4:pass===1?6:3;const cr=rx*.42*sz;for(let i=0;i<n;i++){const a=R()*TAU,d=Math.sqrt(R());const x=ex+Math.cos(a)*d*cr,y=ey+Math.sin(a)*d*cr*.8-(pass===2?cr*.25:0);
-      clump(g,x,y,R.range(12,22)*(pass===2?.8:1),hue+R.range(-4,4),[22,30,34][pass],[12,20,28][pass]+R.range(-2,2),R)}}
-    // ragged fringe: small leaf sprays sticking out past the crown edge
-    skyHoles(g,bx,cyc,rx*.95,ry*.95,26,R);
-    for(const [ex,ey,sz] of ends){const cr=rx*.42*sz;for(let k=0;k<22;k++){const a=R()*TAU,x=ex+Math.cos(a)*cr*R.range(.95,1.35),y=ey+Math.sin(a)*cr*.8*R.range(.95,1.3);g.fillStyle=hsl(hue+R.range(-6,6),26,(Math.sin(a)<0?24:14)+R.range(-3,4),.8);g.beginPath();g.ellipse(x,y,R.range(1.5,3.5),R.range(1,2.4),R()*3,0,TAU);g.fill()}}}
+  if(sp===0||sp===7){// pines: tall bare trunk; upper limbs sweep up and out, each ending in tufted needle masses with gaps between (loblolly: tall oval crown; pitch / shore pine: irregular, flatter, often lopsided)
+    const lob=sp===0;const hue=lob?100+hv:110+hv;const tc=['#54473d','#4c4038','#5a4a3e','#504339'][v&3],td='#241c16';
+    const lean=lob?R.range(-.04,.04):R.range(-.16,.16);const side=lob?0:(v%2?1:-1)*R.range(.2,.6);const tx=bx+lean*th;const top=by-th*.97;
+    // trunk with a gentle S-bend
+    const mid=(t)=>[bx+(tx-bx)*t+Math.sin(t*3.1+v)*th*.012,by+(top-by)*t];const seg=10;for(let i=0;i<seg;i++){const a=mid(i/seg),b=mid((i+1)/seg);trunk(g,a[0],a[1],b[0],b[1],lerp(9,2.5,i/seg),lerp(9,2.5,(i+1)/seg),tc,td)}
+    const cb=lob?R.range(.5,.62):R.range(.32,.45);const nb=lob?7+(R()*3|0):6+(R()*3|0);const tips=[];
+    for(let i=0;i<nb;i++){const f=(i+R.range(.1,.9))/nb,t=cb+f*(1-cb)*.92;const [x,y]=mid(t);const dir=(i%2?1:-1)*(R()<.2?-1:1);const env=lob?Math.sin(Math.PI*Math.min(1,.25+f*.85)):(1-f*.55);
+      const len=tw*.5*env*R.range(.65,1.1)*(1+side*dir);const a=dir>0?-.35-R.range(0,.35)*f:Math.PI+.35+R.range(0,.35)*f;const ex=Math.max(tw*.2,Math.min(W-tw*.2,x+Math.cos(a)*len)),ey=y+Math.sin(a)*len*.5-len*.12;
+      g.strokeStyle=td;g.lineCap='round';g.lineWidth=lerp(3.4,1.6,f);g.beginPath();g.moveTo(x,y);g.quadraticCurveTo((x+ex)/2,y-len*.02,ex,ey);g.stroke();tips.push([ex,ey,len,f]);
+      if(len>tw*.22){const mx=(x+ex)/2,my=(y+ey)/2-len*.04;tips.push([mx+R.range(-4,4),my,len*.5,f])}}
+    tips.push([tx,top+6,tw*.18,1]);
+    const pr=tw*(lob?.15:.17);
+    // each tip carries 2-4 overlapping needle tufts of uneven size, so pads read as ragged, irregular masses (not stacked discs)
+    const T=[];for(const [x,y,l,f] of tips){const nk=2+(R()*3|0);for(let k=0;k<nk;k++)T.push([x+R.range(-.7,.7)*pr,y+R.range(-.45,.25)*pr,pr*R.range(.5,1.05),R.range(lob?.5:.42,lob?.78:.66)])}
+    for(const [x,y,r0,sy] of T){g.save();g.translate(x,y);g.scale(1,sy);clump(g,0,0,r0*1.1,hue+6,20,13,R);g.restore()}
+    for(const [x,y,r0,sy] of T)if(R()<.8){g.save();g.translate(x+R.range(-3,3),y-r0*.25);g.scale(1,sy*.92);clump(g,0,0,r0*.85,hue,26,20,R);g.restore()}
+    for(const [x,y,r0,sy] of T)if(R()<.5){g.save();g.translate(x-r0*.15,y-r0*.45);g.scale(1,sy*.8);clump(g,0,0,r0*.55,hue-4,30,28,R);g.restore()}}
+  else if(sp===1||sp===2){// oak / maple: real branching skeleton (trunk forks into limbs, limbs into branches) carrying layered foliage masses; gaps show limbs and sky
+    const oak=sp===1;const hue=(oak?90:84)+hv;const tc=['#5e5246','#55493e','#62564a','#5a4d41'][v&3],td='#251d17';const lean=R.range(-.12,.12);
+    const forkY=by-th*(oak?R.range(.24,.34):R.range(.3,.4));const fx=bx+lean*th*.3;trunk(g,bx,by,fx,forkY,12,8.5,tc,td);
+        const tips=[];const nL=oak?3+(R()<.6?1:0):3;const sp0=oak?1.5:1.0;
+    for(let i=0;i<nL;i++){const a=-Math.PI/2+(i/(nL-1)-.5)*sp0*R.range(.85,1.15)+lean;limbs(g,fx,forkY,a,th*(oak?.2:.22)*R.range(.85,1.1),9,3,R,oak?1.0:.75,tips,tc,td,oak?.12:.28)}
+    // crown envelope: keep tips inside an ellipse so the silhouette is a broad dome (oak) or an upright oval (maple)
+    const cyc=by-th*(oak?.62:.64),rx=tw*.47,ry=th*(oak?.34:.38);
+    // foliage points: branch tips pulled inside the crown envelope, plus a jittered fill of the envelope so the crown has depth (gaps left at random so limbs and sky show through)
+    const P=tips.map(([x,y])=>{const dx=(x-bx)/rx,dy=(y-cyc)/ry,d=Math.hypot(dx,dy);const k=d>.9?.9/d:1;return[bx+dx*k*rx,cyc+dy*k*ry]});
+    const base=rx*(oak?.25:.23);const step=base*1.3;
+    for(let yy=cyc-ry*.85;yy<=cyc+ry*.75;yy+=step*.8)for(let xx=bx-rx;xx<=bx+rx;xx+=step){const x=xx+R.range(-.4,.4)*step,y=yy+R.range(-.35,.35)*step;const dx=(x-bx)/rx,dy=(y-cyc)/ry;
+      const e=dx*dx+dy*dy*(dy>0?1.5:1);if(e<.82&&R()<(e<.4?.75:.6))P.push([x,y])}
+    P.sort((p,q)=>p[1]-q[1]);// paint upper first; lower masses overlap so undersides read darker
+    for(const [x,y] of P){const dy=(y-cyc)/ry;clump(g,x+(bx-x)*.06,y+(cyc-y)*.06,base*R.range(.85,1.1),hue+5,22,11+Math.max(0,-dy)*4,R)}// shaded inner layer (pulled inward, never a dark rim)
+    for(const [x,y] of P)if(R()<.75){const dy=(y-cyc)/ry;clump(g,x+R.range(-6,6),y+R.range(-4,6),base*R.range(.7,.95),hue,28,17+Math.max(0,-dy)*6-Math.max(0,dy)*3,R)}
+    for(const [x,y] of P){const dy=(y-cyc)/ry,dx=(x-bx)/rx;if(dy<.15&&R()<.55-dx*.25)clump(g,x-base*.15,y-base*.35,base*R.range(.5,.72),hue-3,32,25+Math.max(0,-dy)*5,R)}// sunlit clusters on the upper (sun) side
+    skyHoles(g,bx,cyc,rx*.85,ry*.85,14,R);}
   else if(sp===3){// Monterey cypress: leaning trunk, flat wind-sculpted layered canopy
-    const lean=(v%2?1:-1)*R.range(.15,.35);const tx=bx+lean*tw*.6,ty=by-th*.55;trunk(g,bx,by,tx,ty,13,7,'#5a4636','#271d15');
+    const lean=(v%2?1:-1)*R.range(.12,.25);const tx=bx+lean*tw*.45,ty=by-th*.55;trunk(g,bx,by,tx,ty,13,7,'#5a4636','#271d15');
     g.strokeStyle='#3b2d22';g.lineCap='round';for(let i=0;i<4;i++){g.lineWidth=R.range(3,5);g.beginPath();g.moveTo(tx,ty);g.lineTo(tx+R.range(-.45,.45)*tw,ty-R.range(10,60));g.stroke()}
     const hue=108+hv,wind=lean>0?1:-1,nL=3+(v&1)+(v>>2);// flat-topped, wind-swept pads stacked downwind, lit edges on top, dark undersides
-    for(let L=0;L<nL;L++){const f=L/(nL-1),y=by-th*(.5+f*.36),w=tw*(.42-f*.15)*R.range(.88,1.05),cx=tx+wind*tw*(.02+f*.08)+R.range(-6,6);
+    for(let L=0;L<nL;L++){const f=L/(nL-1),y=by-th*(.5+f*.36),w=tw*(.34-f*.12)*R.range(.88,1.05),cx=tx+wind*tw*(.02+f*.08)+R.range(-6,6);
       g.strokeStyle='#3b2d22';g.lineWidth=R.range(2.5,4.5);g.beginPath();g.moveTo(tx,ty);g.quadraticCurveTo(tx+(cx-tx)*.3,y+20,cx,y+4);g.stroke();
       g.save();g.translate(cx,y);g.scale(1,.62);
       for(let i=0;i<12;i++)clump(g,R.range(-.92,.92)*w*(.75+R()*.25),R.range(4,24),R.range(11,19),hue+6,16,10,R,3);
@@ -510,14 +526,14 @@ function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECI
   else if(sp===8){// eucalyptus: tall pale smooth-barked trunk with peeling patches, few upswept limbs, sparse drooping grey-green clumps
     const lean=R.range(-18,18),tx=bx+lean,ty=by-th*R.range(.42,.66);trunk(g,bx,by,tx,ty,11,6,['#a89b84','#9c8f78','#b0a28a','#94886f'][v&3],'#544a3e');const spread=[.8,1.25,1,1.45][v&3]*(v>3?1.12:1);
     for(let i=0;i<7;i++){const f=R();g.fillStyle=hsl(30,25,R.range(45,62),.7);g.beginPath();g.ellipse(lerp(bx,tx,f)+R.range(-4,4),lerp(by,ty,f),R.range(2,4),R.range(5,12),0,0,TAU);g.fill()}
-    const limbs=[];const nl=3+(v%3)+(R()*2|0);for(let i=0;i<nl;i++){const ex=tx+R.range(-.45,.45)*tw*spread,ey=ty-th*R.range(.06,.34);limbs.push([ex,ey]);g.strokeStyle='#a0937c';g.lineCap='round';g.lineWidth=R.range(3,5);g.beginPath();g.moveTo(tx,ty+10);g.quadraticCurveTo((tx+ex)/2,ty-th*.05,ex,ey);g.stroke()}
-    const hue=88+hv;for(const [ex,ey] of limbs){const nk=13+(R()*7|0);for(let k=0;k<nk;k++)clump(g,ex+R.range(-34,34),ey+R.range(-20,40),R.range(13,23),hue+R.range(-6,6),16,[16,21,27][k%3],R,10)}
+    const limbs=[];const nl=3+(v%3)+(R()*2|0);for(let i=0;i<nl;i++){const ex=Math.max(46,Math.min(W-46,tx+R.range(-.45,.45)*tw*spread)),ey=ty-th*R.range(.06,.34);limbs.push([ex,ey]);g.strokeStyle='#a0937c';g.lineCap='round';g.lineWidth=R.range(3,5);g.beginPath();g.moveTo(tx,ty+10);g.quadraticCurveTo((tx+ex)/2,ty-th*.05,ex,ey);g.stroke()}
+    const hue=88+hv;for(const [ex,ey] of limbs){const nk=13+(R()*7|0);for(let k=0;k<nk;k++)clump(g,Math.max(26,Math.min(W-26,ex+R.range(-34,34))),ey+R.range(-20,40),R.range(13,23),hue+R.range(-6,6),14,[20,26,32][k%3],R,10)}
     for(let k=0;k<9;k++)clump(g,tx+R.range(-.3,.3)*tw,by-th*R.range(.78,.95),R.range(12,19),hue,14,26,R,8)}
   else if(sp===9){// sycamore: mottled white/tan forked trunk, broad open crown of lighter clumps
     const fx=bx+R.range(-4,4),fy=by-th*.36;trunk(g,bx,by,fx,fy,13,9,'#d8d0bf','#8b8170');
     for(let i=0;i<10;i++){const f=R();g.fillStyle=R()<.5?hsl(35,20,R.range(52,62),.8):hsl(80,10,R.range(70,82),.8);g.beginPath();g.ellipse(lerp(bx,fx,f)+R.range(-6,6),lerp(by,fy,f),R.range(3,6),R.range(3,7),R()*3,0,TAU);g.fill()}
     for(const d of[-1,1]){const ex=fx+d*tw*R.range(.18,.3),ey=by-th*R.range(.6,.7);trunk(g,fx,fy,ex,ey,8,4,'#e0d9ca','#8b8170')}
-    const hue=80+hv,cyc=by-th*.68,rx=tw*.5,ry=th*.27;
+    const hue=80+hv,cyc=by-th*.68,rx=tw*.38,ry=th*.27;
     for(let pass=0;pass<3;pass++){const n=pass===0?10:pass===1?14:9;for(let i=0;i<n;i++){const a=R()*TAU,d=Math.sqrt(R());clump(g,bx+Math.cos(a)*d*rx,cyc+Math.sin(a)*d*ry-(pass===2?ry*.15:0),R.range(18,28)*(pass===2?.8:1),hue,[24,32,36][pass],[17,25,33][pass],R)}}skyHoles(g,bx,cyc,rx,ry,24,R);}
   else if(sp===6){// azalea: low dense mound with magenta / pink / white flowers
     const hueF=[320,335,350,0][v&3],lf=[52,62,70,92][v&3];
@@ -527,10 +543,10 @@ function paintTree(g,sp,v,R){const W=ATL.cw,H=ATL.ch,bx=W/2,by=H-4;const S=SPECI
 // per-course species mix [species, weight]
 const TREE_MIX={
   augusta:[[0,.78],[5,.1],[1,.08],[2,.04]],pinevalley:[[7,.62],[0,.32],[1,.06]],sandhills:[[1,.5],[7,.3],[2,.2]],shadowcreek:[[0,.55],[7,.35],[1,.1]],peachtree:[[0,.45],[1,.3],[2,.15],[5,.1]],
-  cypress:[[3,.92],[7,.08]],pebble:[[3,.72],[7,.25],[1,.03]],pacificdunes:[[7,.8],[3,.2]],seminole:[[4,.86],[7,.14]],riviera:[[8,.45],[9,.25],[1,.15],[4,.15]],lacc:[[8,.5],[9,.32],[4,.18]],
+  cypress:[[3,.75],[7,.25]],pebble:[[3,.72],[7,.25],[1,.03]],pacificdunes:[[7,.8],[3,.2]],seminole:[[4,.6],[1,.28],[7,.12]],riviera:[[8,.45],[9,.25],[1,.15],[4,.15]],lacc:[[8,.5],[9,.32],[4,.18]],
   shinnecock:[[1,.6],[5,.4]],ngla:[[1,.55],[5,.45]],fishers:[[3,.5],[1,.3],[5,.2]],friars:[[7,.9],[1,.1]],oakmont:[[1,.5],[2,.5]],crystal:[[1,.36],[2,.34],[7,.3]],
   prairie:[[1,.6],[2,.4]],chicago:[[1,.55],[2,.45]]};
-const TREE_X={wingedfoot:[[1,.5],[2,.38],[9,.12]],shadowcreek:[[0,.5],[7,.3],[1,.2]]};Object.assign(TREE_MIX,TREE_X);
+const TREE_X={wingedfoot:[[1,.5],[2,.38],[9,.12]],shadowcreek:[[0,.62],[7,.3],[1,.08]]};Object.assign(TREE_MIX,TREE_X);
 const TREE_DEFAULT=[[1,.45],[2,.35],[7,.2]];
 function treeMix(cid){return TREE_MIX[cid]||TREE_DEFAULT}
 function pickSpecies(mix,r){let a=0;for(const [s,w] of mix){a+=w;if(r<a)return s}return mix[0][0]}
@@ -724,10 +740,11 @@ function buildHole0(course,geo,hi,teeIdx,opts){
   if(trees.length>4500)trees.length=4500;
   // tree grid for collision
   const TG={};for(const t of trees){const k=(Math.floor(t.x/10))+','+(Math.floor(t.y/10));(TG[k]=TG[k]||[]).push(t)}
-  const treeHit=(x,y,z)=>{const gx=Math.floor(x/10),gy=Math.floor(y/10);for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){const l=TG[(gx+a)+','+(gy+b)];if(!l)continue;for(const t of l){const d=Math.hypot(x-t.x,y-t.y);if(d>t.w*.5)continue;
+  const addTree=t=>{const k=(Math.floor(t.x/10))+','+(Math.floor(t.y/10));(TG[k]=TG[k]||[]).push(t)};
+  const treeHit=(x,y,z)=>{const gx=Math.floor(x/10),gy=Math.floor(y/10);for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){const l=TG[(gx+a)+','+(gy+b)];if(!l)continue;for(const t of l){if(t.gone)continue;const d=Math.hypot(x-t.x,y-t.y);if(d>t.w*.5)continue;
     if(z<t.h*t.cb){if(d<.4&&t.sp!==6)return t;if(t.sp===6&&z<t.h&&d<t.w*.4)return t;continue}if(z<t.h){const f=(z-t.h*t.cb)/(t.h*(1-t.cb));const rr=t.w*.5*(t.sp===0||t.sp===7?Math.sin(Math.PI*clamp(f*.9+.1,0,1)):Math.sqrt(Math.max(0,1-(2*f-1)**2)))*.8;if(d<rr)return t}}}return null};
   const fwAim=[];for(let s=0;s<yards;s+=5){const p=pointAt(hl,s);fwAim.push([p[0],p[1],surfAt(p[0],p[1])])}
-  return{rot,course,hi,par,yards,teeIdx,line:hl,X0,Y0,X1,Y1,W,H,S:SU,HT,NW,NH,hAt,surfAt,slopeAt,greenH,greenG,gm,G,F,sea,cup,trees,treeHit,st,woodMask,tee:{x:0,y:0},pews,toRaw,demAt:dz,gradAt,teeFix:opts.teeFix,name:(course.names&&course.names[hi])||(hd.nm&&!/\d|hole|course/i.test(hd.nm)?hd.nm:''),sig:course.sig&&course.sig[hi+1],quarry:QP,synth:opts.synth||[],grid:opts.grid}}
+  return{addTree,rot,course,hi,par,yards,teeIdx,line:hl,X0,Y0,X1,Y1,W,H,S:SU,HT,NW,NH,hAt,surfAt,slopeAt,greenH,greenG,gm,G,F,sea,cup,trees,treeHit,st,woodMask,tee:{x:0,y:0},pews,toRaw,demAt:dz,gradAt,teeFix:opts.teeFix,name:(course.names&&course.names[hi])||(hd.nm&&!/\d|hole|course/i.test(hd.nm)?hd.nm:''),sig:course.sig&&course.sig[hi+1],quarry:QP,synth:opts.synth||[],grid:opts.grid}}
 
 function projOn(L,x,y){let best=1e9,bs=0,acc=0;for(let i=0;i<L.length-1;i++){const a=L[i],b=L[i+1],dx=b[0]-a[0],dy=b[1]-a[1],l2=dx*dx+dy*dy||1,l=Math.sqrt(l2);let t=((x-a[0])*dx+(y-a[1])*dy)/l2;if(i>0)t=Math.max(0,t);t=Math.min(1,t);const d=Math.hypot(a[0]+dx*t-x,a[1]+dy*t-y);if(d<best){best=d;bs=acc+t*l}acc+=l}return bs}
 // place tee so straight tee->pin distance equals scorecard yardage, on land, preferring OSM tee boxes
@@ -763,8 +780,8 @@ function paintHole(H,PX){
   const hex=c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];
   const C=[hex(st.deep),hex(st.rough),hex(st.fw),hex(st.fw),hex('#5a923a'),hex('#62a040'),hex(st.sand),hex('#2c5a63'),hex(st.deep),hex(st.waste)];
   {const rr=hex(st.rough),dd=hex(st.deep);C[8]=dd.map((v,i)=>v*.6+rr[i]*.4|0);C[0]=C[8].map(v=>v*.9|0)}/* deep rough / woods floor: a softer step down from the rough (no dark smears) */if((H.F.bk||[]).length)C[6]=hex(st.rough);if((H.F.sd||[]).length)C[9]=hex(st.rough);// bunkers are painted from their polygons (no 1-yd stair halo)
-  for(let j=0;j<Hh;j++)for(let i=0;i<W;i++){const s=S[j*W+i],c=C[s],o=((Hh-1-j)*W+i)*4;
-    let v=1;if(s===1||s===8||s===0){v=1+.07*vnoise(i*.09,j*.09)+.05*vnoise(i*.31+9,j*.31)}
+  for(let j=0;j<Hh;j++)for(let i=0;i<W;i++){const s=S[j*W+i],c=s===3?C[1]:C[s],o=((Hh-1-j)*W+i)*4;// tee cells away from the tee in play take the rough colour (the soft tee polygons above give the hint)
+    let v=1;if(s===1||s===8||s===0){v=1+.025*vnoise(i*.09,j*.09)+.02*vnoise(i*.31+9,j*.31)}
     im.data[o]=c[0]*v;im.data[o+1]=c[1]*v;im.data[o+2]=c[2]*v;im.data[o+3]=255}
   bg.putImageData(im,0,0);g.imageSmoothingEnabled=true;g.drawImage(b,0,0,W*PX,Hh*PX);
   g.save();g.scale(PX,PX);
@@ -781,7 +798,7 @@ function paintHole(H,PX){
   // first cut fringe around fairways
   g.lineJoin='round';g.strokeStyle='rgba(62,100,40,.75)';g.lineWidth=2.4;for(const P of(F.fw||[])){path(P);g.stroke()}
   const myTee=P=>{let x=0,y=0;for(const q of P){x+=q[0];y+=q[1]}return Math.hypot(x/P.length,y/P.length)<90};// this hole's whole tee complex (all tee sets) reads as one even tee; other holes' boxes blend into the rough// other holes' tee boxes blend into the rough instead of reading as pale strips
-  const nearTee=P=>{let x=0,y=0;for(const q of P){x+=q[0];y+=q[1]}return Math.hypot(x/P.length,y/P.length)<140};g.fillStyle=st.fw;for(const P of(F.te||[])){g.globalAlpha=myTee(P)?.4:.16;path(P);g.fill()}g.globalAlpha=1;// one even tee complex (no light/dark blocks between tee sets)
+  const nearTee=P=>{let x=0,y=0;for(const q of P){x+=q[0];y+=q[1]}return Math.hypot(x/P.length,y/P.length)<140};const playTee=P=>{let x=0,y=0;for(const q of P){x+=q[0];y+=q[1]}return pip(0,0,P)||Math.hypot(x/P.length,y/P.length)<8};g.fillStyle=st.fw;g.save();g.filter='blur('+(PX*.6).toFixed(1)+'px)';for(const P of(F.te||[])){g.globalAlpha=playTee(P)?.3:0;path(P);g.fill()}g.restore();g.globalAlpha=1;// the tee in play reads as a tee; other tee sets only a faint, soft-edged hint (no pale ovals)// one even tee complex (no light/dark blocks between tee sets)
   g.strokeStyle='#558c37';g.lineWidth=3.6;for(const P of F.gr){path(P);g.stroke()}
   g.fillStyle='#5f9d43';for(const P of F.gr){path(P);g.fill()}
   // bunkers: lip, sand, inner shade
@@ -802,7 +819,7 @@ function paintHole(H,PX){
   g.strokeStyle='rgba(58,52,34,.3)';g.lineWidth=1.;for(const P of(F.wa||[])){path(P);g.stroke()}
   // water
   g.fillStyle='#24525c';for(const P of(F.wa||[]).concat(H.sea)){path(P);g.fill()}
-  g.fillStyle=st.rough;g.fillRect(-7-X0,Y1-7,14,13);g.fillStyle=mkStripe('#5a933a','#528a35',1.5,90);g.fillRect(-5-X0,Y1-5,10,9);
+  if(!(F.te||[]).some(myTee)){g.fillStyle=st.fw;g.globalAlpha=.4;g.fillRect(-5-X0,Y1-5,10,9);g.globalAlpha=1}// no tee polygon: a plain tee (the shader mows it); never a striped pale slab
   if(H.grid){g.strokeStyle='rgba(255,255,255,.75)';g.lineWidth=.35;for(let y=150;y<=425;y+=25){g.beginPath();g.moveTo(-30-X0,Y1-y);g.lineTo(30-X0,Y1-y);g.stroke()}
     g.lineWidth=.5;for(const x of[-30,30]){g.beginPath();g.moveTo(x-X0,Y1-140);g.lineTo(x-X0,Y1-440);g.stroke()}}
   g.restore();
@@ -810,7 +827,7 @@ function paintHole(H,PX){
   const R=RNG('p'+H.course.id+H.hi);
   for(let n=0;n<W*Hh*.02;n++){const x=R()*W,y=R()*Hh,s=S[Math.floor(Hh-1-y)*W+Math.floor(x)];
     if(s===9){g.fillStyle=R()<.5?'rgba(80,90,40,.7)':'rgba(140,120,80,.5)';g.beginPath();g.arc(x*PX,y*PX,PX*R.range(.3,.9),0,TAU);g.fill()}
-    else if(s===8||s===0){g.fillStyle=R()<.5?'rgba(40,60,25,.35)':'rgba(150,150,90,.25)';g.beginPath();g.arc(x*PX,y*PX,PX*R.range(.4,1.2),0,TAU);g.fill()}}
+    else if(s===8||s===0){g.fillStyle=R()<.5?'rgba(40,60,25,.12)':'rgba(150,150,90,.1)';g.beginPath();g.arc(x*PX,y*PX,PX*R.range(.3,.7),0,TAU);g.fill()}}
   // tree shadows (sun direction)
   // quarry floor: sandy base with scrub clumps, exposed rock and rough patches
   if(H.quarry&&H.quarry.length){const RQ=RNG('qp'+H.hi);for(const P of H.quarry){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const q of P){x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1])}
@@ -821,7 +838,12 @@ function paintHole(H,PX){
   // underbrush at the base of pines on heath / pine-barren courses (Pine Valley style sandy scrub)
   if(H.course.style==='heath'||H.st.trees>.9){const RS=RNG('ub'+H.course.id+H.hi);for(const t of H.trees){if(t.sp!==0&&t.sp!==7)continue;
       const n=2+(RS()*4|0);for(let i=0;i<n;i++){const a=RS()*TAU,d=RS()*t.w*.35,x=t.x+Math.cos(a)*d,y=t.y+Math.sin(a)*d;const sf=H.surfAt(x,y);if(sf!==1&&sf!==8&&sf!==0&&sf!==9)continue;const r=RS.range(.6,1.8)*PX;
-        g.fillStyle=RS()<.35?'rgba(168,150,110,.35)':RS()<.5?'rgba(58,70,34,.55)':'rgba(84,92,46,.45)';g.beginPath();g.ellipse((x-X0)*PX,(Y1-y)*PX,r,r*RS.range(.6,1),RS()*3,0,TAU);g.fill()}}}
+        g.fillStyle=RS()<.5?'rgba(58,70,34,.4)':'rgba(70,80,40,.32)';g.beginPath();g.ellipse((x-X0)*PX,(Y1-y)*PX,r,r*RS.range(.6,1),RS()*3,0,TAU);g.fill()}}}
+  // pine straw beds under the pines (Augusta): soft, irregular reddish-brown carpets, not discs
+  if(H.course.id==='augusta'){const RP=RNG('ps'+H.hi);g.save();for(const t of H.trees){if(t.sp!==0&&t.sp!==7)continue;const n=2+(RP()*3|0);for(let i=0;i<n;i++){const a=RP()*TAU,d=RP()*t.w*.3,x=t.x+Math.cos(a)*d,y=t.y+Math.sin(a)*d;const sf=H.surfAt(x,y);if(sf!==1&&sf!==8&&sf!==0)continue;
+    const r=t.w*RP.range(.2,.34)*PX,cx=(x-X0)*PX,cy=(Y1-y)*PX;if(!(r>1&&isFinite(cx+cy)))continue;const gr=g.createRadialGradient(cx,cy,0,cx,cy,r);gr.addColorStop(0,'rgba(118,84,52,.5)');gr.addColorStop(.6,'rgba(118,84,52,.32)');gr.addColorStop(1,'rgba(118,84,52,0)');g.fillStyle=gr;g.beginPath();g.ellipse(cx,cy,r,r*RP.range(.65,.95),RP()*3,0,TAU);g.fill();
+    // needle litter: fine short strokes in mixed straw tones
+    const m=Math.min(260,r*r*.06|0);for(let c=0;c<3;c++){g.strokeStyle=['rgba(150,108,66,.55)','rgba(96,66,40,.5)','rgba(168,130,84,.45)'][c];g.lineWidth=Math.max(.6,PX*.12);g.beginPath();for(let k=0;k<m/3;k++){const aa=RP()*TAU,dd=Math.sqrt(RP())*r*.85,px=cx+Math.cos(aa)*dd,py=cy+Math.sin(aa)*dd*.8,ang=RP()*TAU,l=PX*RP.range(.25,.6);g.moveTo(px,py);g.lineTo(px+Math.cos(ang)*l,py+Math.sin(ang)*l)}g.stroke()}}}g.restore()}
   // soft, capped tree shadows: one layer so overlapping crowns never stack darker than a single shadow, tinted by skylight so shaded turf stays green
   const SHA=.15+.07*Math.max(0,Math.min(1,(.38-SUN_FRAME[2])/.18));const sz=Math.max(SUN_FRAME[2],.36),sx=-SUN_FRAME[0]/sz,sy=-SUN_FRAME[1]/sz;
   {const cv0=g.canvas,sc=document.createElement('canvas');sc.width=cv0.width;sc.height=cv0.height;const q=sc.getContext('2d');
@@ -838,7 +860,7 @@ function paintHole(H,PX){
   const pth=(q,P)=>{q.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?q.lineTo(x,y):q.moveTo(x,y)});q.closePath()};
   const fromS=(q,test,col)=>{const b2=document.createElement('canvas');b2.width=W;b2.height=Hh;const bq=b2.getContext('2d'),id=bq.createImageData(W,Hh);for(let j=0;j<Hh;j++)for(let i=0;i<W;i++){const o=((Hh-1-j)*W+i)*4,v=test(S[j*W+i]);id.data[o]=id.data[o+1]=id.data[o+2]=v;id.data[o+3]=255}bq.putImageData(id,0,0);q.imageSmoothingEnabled=true;q.drawImage(b2,0,0,W,Hh)};
   const cR=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='#fff';for(const P of(F.wa||[]).concat(H.sea)){pth(q,P);q.fill()}});
-  const cG=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='rgb(40,40,40)';for(const P of(F.fw||[]).concat((F.te||[]).filter(myTee))){pth(q,P);q.fill()}q.strokeStyle='rgb(110,110,110)';q.lineWidth=3.6;q.lineJoin='round';for(const P of F.gr){pth(q,P);q.stroke()}q.fillStyle='#fff';for(const P of F.gr){pth(q,P);q.fill()}q.fillStyle='#000';for(const P of(F.bk||[])){pth(q,P);q.fill()}});
+  const cG=chan(q=>{q.filter='blur('+(MS*.5)+'px)';q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='rgb(40,40,40)';for(const P of(F.fw||[])){pth(q,P);q.fill()}q.save();q.filter='blur('+(MS*1.2)+'px)';q.fillStyle='rgb(26,26,26)';for(const P of(F.te||[]).filter(P=>{let x=0,y=0;for(const r of P){x+=r[0];y+=r[1]}return pip(0,0,P)||Math.hypot(x/P.length,y/P.length)<8})){pth(q,P);q.fill()}q.restore();q.strokeStyle='rgb(110,110,110)';q.lineWidth=3.6;q.lineJoin='round';for(const P of F.gr){pth(q,P);q.stroke()}q.fillStyle='#fff';for(const P of F.gr){pth(q,P);q.fill()}q.fillStyle='#000';for(const P of(F.bk||[])){pth(q,P);q.fill()}});
   const cB=chan(q=>{q.fillStyle='#000';q.fillRect(0,0,W,Hh);q.fillStyle='#fff';for(const P of(F.bk||[])){pth(q,P);q.fill()}
     if(H.pews){const p=H.pews;q.save();pth(q,p.P);q.clip();q.translate(p.cx-X0,Y1-p.cy);q.rotate(-p.ang);q.fillStyle='#000';for(let k=0;k<p.n;k++){const u=p.u0+(k+.5)*p.sp,w=p.sp*.5;q.beginPath();q.roundRect(p.v0+3,-(u+w*.5),p.v1-p.v0-6,w,w*.5);q.fill()}q.restore()}});
   const native=H.st.trees<.4&&['links','dunes','prairie','coastal','heath'].includes(H.course.style)&&H.course.id!=='chicago';
@@ -858,7 +880,7 @@ const M4={
 };
 const GLSL_COMMON=`
 uniform vec3 uSun;uniform vec3 uSunCol;uniform vec3 uSkyTop;uniform vec3 uSkyHor;uniform vec3 uFogCol;uniform float uFogK;uniform vec3 uEye;uniform float uTime;uniform float uMist;uniform float uMistZ;uniform float uSeaZ;
-vec3 skyCol(vec3 d){float h=max(d.z,0.);vec3 c=mix(uSkyHor,uSkyTop,pow(h,.4));float s=max(dot(d,uSun),0.);c+=uSunCol*(pow(s,8.)*.25+pow(s,64.)*.35+pow(s,700.)*4.+pow(s,3.)*.2*(1.-uSun.z));return c;}
+vec3 skyCol(vec3 d){float h=max(d.z,0.);vec3 c=mix(uSkyHor,uSkyTop,pow(h,.32));float s=max(dot(d,uSun),0.);vec3 sc=uSunCol/max(1.,max(uSunCol.r,max(uSunCol.g,uSunCol.b))*.8);c+=sc*(pow(s,8.)*.14+pow(s,64.)*.22+pow(s,700.)*1.5+pow(s,3.)*.1*(1.-uSun.z));return c;}// softer glow so the sun disc stands out instead of a white-out
 vec3 tm(vec3 c){c*=1.05;vec3 a=c*(2.51*c+.03),b=c*(2.43*c+.59)+.14;c=clamp(a/b,0.,1.);float l=dot(c,vec3(.299,.587,.114));return mix(vec3(l),c,.9);}
 vec3 fogit(vec3 c,vec3 p){float d=length(p-uEye);float f=1.-exp(-d*d*uFogK);vec3 v=normalize(p-uEye);float s=pow(max(dot(v,uSun),0.),6.);vec3 fc=mix(uFogCol,uSunCol*.9+uFogCol*.4,s*.6);c=mix(c,fc,clamp(f,0.,.8-.24*smoothstep(.4,.5,uSun.z)));if(uMist>0.){float hm=1.-smoothstep(-1.5,1.8,p.z-uMistZ);float dm=smoothstep(35.,240.,d);float nm=.75+.5*sin(p.x*.05+uTime*.05)*sin(p.y*.043-uTime*.03);c=mix(c,uFogCol*1.06,clamp(uMist*hm*dm*nm*.11,0.,.09));}return c;}
 `;
@@ -885,6 +907,7 @@ float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 void main(){
   vec2 uv=(vP.xy-uReg.xy)/uReg.zw;vec2 cuv=clamp(uv,0.,1.);
   vec3 c=texture(uCol,cuv,-.75).rgb;vec4 m=texture(uMask,cuv);
+  {float od0=length(max(abs(uv-.5)-.5,0.)*uReg.zw);float k0=smoothstep(0.,6.,od0);m.gba*=1.-k0;c=mix(c,vec3(dot(c,vec3(.333)))*vec3(.85,1.,.7)+(c-vec3(dot(c,vec3(.333))))*.4,k0*.6);}// beyond the hole box: no edge-clamped fairway/green/tee strips running to the horizon
   // crisp edges: re-split the blurred colour texture across sand and green edges using the mask gradient
   vec2 ey=.5/uReg.zw;float sgB=0.,sgG=0.;
   if(m.b>.02&&m.b<.98){vec2 gd=vec2(texture(uMask,cuv+vec2(ey.x,0.)).b-texture(uMask,cuv-vec2(ey.x,0.)).b,texture(uMask,cuv+vec2(0.,ey.y)).b-texture(uMask,cuv-vec2(0.,ey.y)).b);
@@ -906,10 +929,11 @@ void main(){
   float dE=length(vP-uEye);float near=1.-smoothstep(10.,85.,dE);vec4 nz4=texture(uNoise,vP.xy*5.3);vec4 nz5=texture(uNoise,vP.xy*13.1+.37);
   vec2 dx=dFdx(vP.xy),dy=dFdy(vP.xy);float lx=length(dx),ly=length(dy);float fp=sqrt(lx*ly)*1.6,fpM=max(lx,ly)*1.25;// fine layers fade by the long (along-view) footprint so grazing angles don't streak
   float w3=1.-smoothstep(.2,.55,fp*1.7),w4=1.-smoothstep(.2,.55,fpM*5.3),w5=1.-smoothstep(.2,.55,fpM*13.1);
-  c*=mix(1.,.9+.2*nz.g,.7)*mix(1.,.93+.14*nz2.r,grass)*mix(1.,.9+.2*nz3.g,.7*w3)*mix(1.,.8+.4*nz4.b,grass*w4*.85)*mix(1.,.76+.48*nz5.a,grass*w5*.75);
-  {float w6=(1.-smoothstep(.2,.55,fpM*31.))*(1.-smoothstep(10.,70.,dE));float bl6=texture(uNoise,vP.xy*vec2(31.,23.)+.71).r*.6+texture(uNoise,vP.xy*vec2(61.,47.)+.13).g*.4;c*=mix(1.,.62+.76*bl6,grass*w6*.8);
-   float w8=(1.-smoothstep(.2,.55,fpM*9.))*(1.-smoothstep(25.,110.,dE));float b8=texture(uNoise,vP.xy*vec2(8.7,7.9)+.29).a;c*=mix(1.,.8+.4*b8,grass*w8*.6);}
-  {float w7=(1.-smoothstep(.3,.8,fp*3.))*smoothstep(18.,40.,dE)*(1.-smoothstep(160.,340.,dE));float b7=texture(uNoise,vP.xy*vec2(1.3,1.1)+.2).g*.5+texture(uNoise,vP.xy*vec2(2.9,2.3)+.6).b*.5;c*=mix(1.,.84+.32*b7,grass*w7*.55);}
+  float mown=max(smoothstep(.07,.13,m.g),0.)*(1.-m.b);// fairway, tee and green: shading comes only from the mowing pattern + fine blade grain, no broad brightness patches
+  float rgN=1.-mown;c*=mix(1.,.96+.08*nz.g,.7*rgN)*mix(1.,.96+.08*nz2.r,grass*rgN)*mix(1.,.9+.2*nz3.g,.7*w3)*mix(1.,.8+.4*nz4.b,grass*w4*.85)*mix(1.,.76+.48*nz5.a,grass*w5*.75);
+  {float w6=(1.-smoothstep(.2,.55,fpM*31.))*(1.-smoothstep(10.,70.,dE));float bl6=texture(uNoise,vP.xy*vec2(31.,23.)+.71).r*.6+texture(uNoise,vP.xy*vec2(61.,47.)+.13).g*.4;c*=mix(1.,.8+.4*bl6,grass*w6*.8);
+   float w8=(1.-smoothstep(.2,.55,fpM*9.))*(1.-smoothstep(25.,110.,dE));float b8=texture(uNoise,vP.xy*vec2(8.7,7.9)+.29).a;c*=mix(1.,.8+.4*b8,grass*w8*.6*rgN);}
+  {float w7=(1.-smoothstep(.3,.8,fp*3.))*smoothstep(18.,40.,dE)*(1.-smoothstep(160.,340.,dE));float b7=texture(uNoise,vP.xy*vec2(1.3,1.1)+.2).g*.5+texture(uNoise,vP.xy*vec2(2.9,2.3)+.6).b*.5;c*=mix(1.,.9+.2*b7,grass*w7*.55*rgN);}
   c=pow(c,vec3(2.2));
   float rkG=0.;{vec3 N0=normalize(vN);float sl0=length(N0.xy);float rk=uFoam*smoothstep(.45,.72,sl0)*(1.-smoothstep(uSeaZ+30.,uSeaZ+45.,vP.z))*(1.-smoothstep(.3,.5,m.r));
     if(rk>0.){float st=texture(uNoise,vec2((vP.x+vP.y)*.045,vP.z*.22)).r*.45+texture(uNoise,vP.xy*.13+vec2(0.,vP.z*.08)).g*.35+nz4.b*.2;vec3 rc=mix(vec3(.30,.27,.23),vec3(.52,.47,.40),smoothstep(.25,.8,st));rc*=.9+.2*nz3.r;c=mix(c,pow(rc,vec3(2.2)),rk);}rkG=rk;}
@@ -963,25 +987,29 @@ ${GLSL_COMMON}
 in vec2 vU;out vec4 o;uniform vec3 uF;uniform vec3 uR;uniform vec3 uU;uniform vec2 uT;uniform sampler2D uNoise;
 void main(){vec3 d=normalize(uF+uR*vU.x*uT.x+uU*vU.y*uT.y);vec3 c=skyCol(d);float cl=0.;
   {float s=max(dot(d,uSun),0.);vec3 wc=uSunCol/max(max(uSunCol.r,uSunCol.g),uSunCol.b);c+=wc*vec3(1.,.82,.62)*pow(s,5.)*.1*(1.-uSun.z);}// warm sky tint around the sun
-  if(d.z>0.){vec2 cp=d.xy/(d.z+.08)*.12+vec2(uTime*.0015,0.);cl=texture(uNoise,cp).r*.6+texture(uNoise,cp*2.3).g*.3+texture(uNoise,cp*5.).b*.1;cl=smoothstep(.5,.78,cl)*smoothstep(.0,.25,d.z);
-    vec3 cc=mix(vec3(1.),uSunCol,.35)*mix(.85,1.15,pow(max(dot(d,uSun),0.),3.));c=mix(c,cc,cl*.75);}
+  if(d.z>0.){vec2 cp=d.xy/(d.z+.08)*.12+vec2(uTime*.0015,0.);cl=texture(uNoise,cp).r*.6+texture(uNoise,cp*2.3).g*.3+texture(uNoise,cp*5.).b*.1;cl=smoothstep(.48,.74,cl)*smoothstep(-.01,.07,d.z);
+    // cumulus: puffy detail at the edges, lit from the sun side (bright tops, soft grey-blue bases)
+    float det=texture(uNoise,cp*9.+.37).r;cl=clamp(cl*(.8+.4*det),0.,1.);
+    vec2 so=normalize(uSun.xy+1e-4)*.012;float cl2=texture(uNoise,cp+so).r*.6+texture(uNoise,(cp+so)*2.3).g*.3+texture(uNoise,(cp+so)*5.).b*.1;float lit=clamp(.6+(cl2-.62)*-3.,0.,1.);
+    vec3 base=mix(uSkyHor,vec3(.62,.66,.74),.55),top=mix(vec3(1.),uSunCol/max(max(uSunCol.r,uSunCol.g),uSunCol.b),.3);
+    vec3 cc=mix(base,top,lit)*mix(.9,1.15,pow(max(dot(d,uSun),0.),3.));c=mix(c,cc,cl*.85);}
   {// the sun: a bright disc (~1.1 deg) with a soft limb and bloom, dimmed by cloud, morning haze and the horizon murk
     float s=dot(d,uSun);vec3 wc=uSunCol/max(max(uSunCol.r,uSunCol.g),uSunCol.b);float hz=smoothstep(-.01,.08,d.z);float k=(1.-cl*.85)*(1.-.35*uMist)*mix(.35,1.,hz);
-    float disc=smoothstep(.99975,.99983,s);float bloom=pow(max(s,0.),900.)*1.2+pow(max(s,0.),120.)*.35;c+=(mix(vec3(1.,.98,.93),wc,.45)*disc*7.+wc*bloom)*k;}
+    float disc=smoothstep(.99975,.99983,s);float bloom=pow(max(s,0.),900.)*1.2+pow(max(s,0.),120.)*.35;c+=(mix(vec3(1.,.98,.93),wc,.45+.5*(1.-smoothstep(.05,.3,uSun.z)))*disc*7.+wc*bloom)*k;}
   c=mix(c,uFogCol,smoothstep(.06,-.02,d.z)*.8);
   o=vec4(pow(tm(c),vec3(1./2.2)),1.);}`);
   R.pTree=prog(`
 layout(location=0) in vec2 aQ;layout(location=3) in vec4 iP;layout(location=4) in vec4 iW;
-uniform mat4 uVP;uniform float uTime;uniform vec3 uEye;out vec3 vP;out vec2 vUV;out float vTint;out float vY;out float vFace;out float vNear;
-void main(){vec2 v=uEye.xy-iP.xy;float l=length(v);vNear=smoothstep(5.,13.,l);v=l>.001?v/l:vec2(0.,1.);vec2 r=vec2(-v.y,v.x);
+uniform mat4 uVP;uniform float uTime;uniform vec3 uEye;uniform float uR3;out vec3 vP;out vec2 vUV;out float vTint;out float vY;out float vFace;out float vNear;out float vF3;
+void main(){float spc=floor(iW.y/8.);float is3=(uR3>0.&&spc!=4.&&spc!=5.&&spc!=6.)?1.:0.;vF3=mix(1.,step(uR3,length(iP.xy-uEye.xy)),is3);if(vF3<=0.){gl_Position=vec4(2.,2.,2.,1.);return;}vec2 v=uEye.xy-iP.xy;float l=length(v);vNear=smoothstep(5.,13.,l);v=l>.001?v/l:vec2(0.,1.);vec2 r=vec2(-v.y,v.x);
  float qh=iP.w,qw=iW.x;float sw=sin(uTime*1.1+iP.x*.21+iP.y*.17)*.010*qh*aQ.y*aQ.y;
  vec3 p=vec3(iP.xy+r*aQ.x*qw+vec2(.7,.4)*sw+r*(iW.z-.5)*.11*qh*aQ.y*aQ.y,iP.z+aQ.y*qh);
  float cell=iW.y;float col=mod(cell,16.),row=floor(cell/16.);float ux=iW.w>0.?aQ.x+.5:.5-aQ.x;
  vUV=vec2((col+clamp(ux,.012,.988))/16.,(row+clamp(1.-aQ.y,.016,.996))/5.);vP=p;vTint=iW.z;vY=aQ.y;vFace=dot(v,normalize(vec2(.38,-.52)));
  gl_Position=uVP*vec4(p,1.);}`,`
 ${GLSL_COMMON}
-in vec3 vP;in vec2 vUV;in float vTint;in float vY;in float vFace;in float vNear;out vec4 o;uniform sampler2D uAtl;
-void main(){vec4 t=texture(uAtl,vUV);if(t.a<.42||vNear<fract(sin(dot(gl_FragCoord.xy,vec2(12.98,78.23)))*43758.5))discard;vec3 c=pow(t.rgb,vec3(2.2));
+in vec3 vP;in vec2 vUV;in float vTint;in float vY;in float vFace;in float vNear;in float vF3;out vec4 o;uniform sampler2D uAtl;
+void main(){vec4 t=texture(uAtl,vUV);if(t.a<.5||vNear<fract(sin(dot(gl_FragCoord.xy,vec2(12.98,78.23)))*43758.5))discard;vec3 c=pow(t.rgb/max(t.a,.001),vec3(2.2));
  c*=mix(vec3(.86,.92,.82),vec3(1.12,1.06,.92),vTint);
  float lit=.62+.38*clamp(vFace*.5+.5,0.,1.);vec3 amb=mix(uSkyHor*.35,uSkyTop*.45,.6);
  vec3 col=c*(amb*1.1+uSunCol*lit*.95)*(.78+.32*vY);
@@ -1028,11 +1056,12 @@ void main(){float a=abs(vA.y);float glow=exp(-a*a*6.)*.55;float core=1.-smoothst
   R.flagM=(()=>{const P=[],N=[],I=[],nx=10,ny=6;for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){P.push(i/nx,0,j/ny);N.push(0,-1,0)}for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*(nx+1)+i;I.push(k,k+1,k+nx+1,k+1,k+nx+2,k+nx+1)}return meshFrom(P,N,I)})();
   R.disc=(()=>{const P=[0,0,0],N=[0,0,1],I=[],s=16;for(let j=0;j<=s;j++){const p=j/s*TAU;P.push(Math.cos(p),Math.sin(p),0);N.push(0,0,1)}for(let j=1;j<=s;j++)I.push(0,j,j+1);return meshFrom(P,N,I)})();
   // tree impostor atlas
-  {const atl=paintTreeAtlas();R.atl=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atl);gl.generateMipmap(gl.TEXTURE_2D);
+  {const atl=paintTreeAtlas();R.atl=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atl);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);gl.generateMipmap(gl.TEXTURE_2D);// premultiplied: mipmaps filter leaf edges without bright/dark fringes
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);R.atlCanvas=atl}
   R.treeV=vao([{loc:0,n:2,d:new Float32Array([-.5,0,.5,0,-.5,1,.5,0,.5,1,-.5,1])},{loc:3,n:4,d:new Float32Array(4),inst:1,dyn:1},{loc:4,n:4,d:new Float32Array(4),inst:1,dyn:1}]);R.treeV.inst=0;
   R.tracer=vao([{loc:0,n:3,d:new Float32Array(6000*3),dyn:1},{loc:1,n:2,d:new Float32Array(6000*2),dyn:1}]);R.tracerN=0;
   R.trailers=[];
+  try{if(typeof t3Init==='function')t3Init(R,prog,vao)}catch(e){console.warn('3D trees off:',e&&e.message);R.t3=null}
   return R}
 
 'use strict';
@@ -1040,6 +1069,8 @@ function glSetHole(R,H,PX){
   const gl=R.gl;
   // free previous
   if(R.hole){const o=R.hole;for(const t of[o.tCol,o.tMask])gl.deleteTexture(t);for(const v of[o.ter,o.outer]){for(const a of v.attrs)gl.deleteBuffer(a.buf);gl.deleteBuffer(v.ib);gl.deleteVertexArray(v.v)}}
+  infillTrees(H);
+  {let n=0;for(const t of H.trees)if(treeSpotOK(H,t.x,t.y,Math.min(4,t.w*.25)))H.trees[n++]=t;else t.gone=1;H.trees.length=n}// drop unplaceable trees BEFORE painting, so no orphan shadows are left on the turf
   const P=paintHole(H,PX);
   const tCol=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tCol);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,P.cv);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
   gl.generateMipmap(gl.TEXTURE_2D);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
@@ -1067,23 +1098,35 @@ function glSetHole(R,H,PX){
   for(let j=0;j<nY-1;j++)for(let i=0;i<nX-1;i++){if(XS[i]>=H.X0&&XS[i+1]<=H.X1&&YS[j]>=H.Y0&&YS[j+1]<=H.Y1)continue;const k=j*nX+i;oi.push(k,k+1,k+nX,k+1,k+nX+1,k+nX)}
   const outer=R.vao([{loc:0,n:3,d:op},{loc:1,n:3,d:on}],new Uint32Array(oi));
   // trees + border treeline
-  {let n=0;for(const t of H.trees)if(treeSpotOK(H,t.x,t.y,Math.min(4,t.w*.25)))H.trees[n++]=t;H.trees.length=n}
-  const all=H.trees.slice();const TR=RNG('b'+H.course.id+H.hi);const mix=treeMix(H.course.id).filter(m=>m[0]!==6&&m[0]!==5);const dens=H.st.trees;
+  const all=H.trees.slice();const TR=RNG('b'+H.course.id+H.hi);const mix=treeMix(H.course.id).filter(m=>m[0]!==6&&m[0]!==5);const dens=H.st.trees;const canyon=H.course.id==='shadowcreek';// Shadow Creek: a dense pine canyon
+  const INF={shadowcreek:1,seminole:.75,muirfieldv:.7,oaklandhills:.7,wingedfoot:.55,augusta:.55,pebble:.4,oakmont:.25,oakhill:.6,merion:.45,chicago:.4,peachtree:.6,pinevalley:.7,riviera:.5,lacc:.45,tcc:.5,crystal:.4,cypress:.45}[H.course.id]||0;const boost=INF>=.55&&!canyon;
   const ring=(x,y)=>{const s=H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1));if(s===S_WATER)return;if(H.sea.length&&H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1))===S_WATER)return;
     // fewer trees behind the green (no uniform wall framing the flag), with gaps and stronger height variety
     const beyond=y>H.Y1-5;if(beyond&&TR()<.55)return;if(TR()<.12)return;
     // natural stands: clumps and clearings from low-frequency noise instead of even rectangular rings
-    {const cl=vnoise(x*.022+H.hi*3.1,y*.022-H.hi*1.7)*.7+vnoise(x*.061+5,y*.061+2)*.3;{const q=clamp((cl-.28)/.34,0,1);if(TR()>q*q*(3-2*q)*1.15)return}}
+    {const cl=vnoise(x*.022+H.hi*3.1,y*.022-H.hi*1.7)*.7+vnoise(x*.061+5,y*.061+2)*.3;{const q=clamp((cl-(canyon?.12:.28))/.34,0,1);if(TR()>q*q*(3-2*q)*(canyon?1.8:boost?1.45:1.15))return}}
     const sp=pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*TR.range(sp===8||sp===4?.5:.68,sp===8?1.45:1.32);const w=h*S.w*TR.range(.85,1.2);if(!treeSpotOK(H,x,y,Math.min(4,w*.25)))return;all.push({x,y,sp,v:TR.int(8),h,w,out:1})};
-  if(dens>.1){const s0=dens>.3?8:16;for(let d=6;d<150;d+=s0+d*.12){const step=(s0+d*.1)*.78;for(let x=H.X0-d;x<H.X1+d;x+=step){if(TR()<.8){ring(x+TR.range(-.6,.6)*step*1.6,H.Y1+d+TR.range(-.5,1)*step*1.8);ring(x+TR.range(-.6,.6)*step*1.6,H.Y0-d-TR.range(-.5,1)*step*1.8)}}
-    for(let y=H.Y0-d;y<H.Y1+d;y+=step){if(TR()<.8){ring(H.X0-d-TR.range(-.5,1)*step*1.8,y+TR.range(-.6,.6)*step*1.6);ring(H.X1+d+TR.range(-.5,1)*step*1.8,y+TR.range(-.6,.6)*step*1.6)}}}}H.allTrees=all;
+  if(dens>.1||boost){const s0=canyon?5.5:boost?6.5:dens>.3?8:16;for(let d=6;d<150;d+=s0+d*.12){const step=(s0+d*.1)*.78;for(let x=H.X0-d;x<H.X1+d;x+=step){if(TR()<.8){ring(x+TR.range(-.6,.6)*step*1.6,H.Y1+d+TR.range(-.5,1)*step*1.8);ring(x+TR.range(-.6,.6)*step*1.6,H.Y0-d-TR.range(-.5,1)*step*1.8)}}
+    for(let y=H.Y0-d;y<H.Y1+d;y+=step){if(TR()<.8){ring(H.X0-d-TR.range(-.5,1)*step*1.8,y+TR.range(-.6,.6)*step*1.6);ring(H.X1+d+TR.range(-.5,1)*step*1.8,y+TR.range(-.6,.6)*step*1.6)}}}}
+  H.allTrees=all;
   if(all.length>6500)all.length=6500;
-  {const n=all.length,ip=new Float32Array(n*4),iw=new Float32Array(n*4);all.forEach((t,i)=>{const S=SPECIES[t.sp];const inR=t.x>H.X0&&t.x<H.X1&&t.y>H.Y0&&t.y<H.Y1;
+  {const n=all.length,ip=new Float32Array(n*4),iw=new Float32Array(n*4);{const cid=H.course.id;const PM=['lacc','riviera'].includes(cid)?[.8,0,0,1]:['seminole','tpc','sawgrass','jupiter','bayhill'].includes(cid)?[0,.6,.88,1]:[0,.45,.55,1];const HM=[1.4,1,1.12,.72];all.forEach((t,i)=>{if(t.sp!==4||t._pv)return;const r=hash2(i,57);const ty=r<PM[0]?0:r<PM[1]?1:r<PM[2]?2:3;t.v=ty+4*(t.v>>2&1);t.h*=HM[ty]*(.85+.3*hash2(i,59));t._pv=1})}// palm types per course (Washingtonia at LA, cabbage / royal in Florida, date elsewhere), each with its own height
+    all.forEach((t,i)=>{const S=SPECIES[t.sp];const inR=t.x>H.X0&&t.x<H.X1&&t.y>H.Y0&&t.y<H.Y1;
       const qh=t.h*S.qk;ip[i*4]=t.x;ip[i*4+1]=t.y;ip[i*4+2]=(inR?H.hAt(t.x,t.y):H.demAt(t.x,t.y)-.15)-.15;const hv=.86+.28*hash2(i,19),wv=.8+.42*hash2(i,13);ip[i*4+3]=qh*hv;iw[i*4]=qh*hv*wv*ATL.cw/ATL.ch;iw[i*4+1]=t.sp*8+(t.v%8);iw[i*4+2]=hash2(i,7);iw[i*4+3]=hash2(7,i)<.5?1:-1});
+    if(typeof t3List==='function')t3List(R,all,H);
     const v=R.treeV;gl.bindBuffer(gl.ARRAY_BUFFER,v.attrs[1].buf);gl.bufferData(gl.ARRAY_BUFFER,ip,gl.STATIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,v.attrs[2].buf);gl.bufferData(gl.ARRAY_BUFFER,iw,gl.STATIC_DRAW);v.inst=n}
   const hx=c=>[parseInt(c.slice(1,3),16)/255,parseInt(c.slice(3,5),16)/255,parseInt(c.slice(5,7),16)/255];const f1=hx(H.st.rough),f2=hx(H.st.deep);
   R.hole={H,tCol,tMask,ter,outer,mini:P.cv,far:[0,1,2].map(i=>f1[i]*.55+f2[i]*.45)};
   return P.cv}
+function infillTrees(H){if(H._infill)return;H._infill=1;const canyon=H.course.id==='shadowcreek';const TR=RNG('inf'+H.course.id+H.hi);const mix=treeMix(H.course.id).filter(m=>m[0]!==6&&m[0]!==5);
+  const INF={shadowcreek:1,seminole:.75,muirfieldv:.7,oaklandhills:.7,wingedfoot:.55,augusta:.55,pebble:.4,oakmont:.25,oakhill:.6,merion:.45,chicago:.4,peachtree:.6,pinevalley:.7,riviera:.5,lacc:.45,tcc:.5,crystal:.4,cypress:.45}[H.course.id]||0;
+  if(INF>0){// infill the rough inside the hole box: tight pine stands that hug the corridor (kept clear of fairway, green, tees and the line of play)
+    const lineD=(x,y)=>{const L=H.line||[];let m=1e9;for(let i=0;i+1<L.length;i++){const ax=L[i][0],ay=L[i][1],bx=L[i+1][0]-ax,by=L[i+1][1]-ay,l2=bx*bx+by*by||1;const t=clamp(((x-ax)*bx+(y-ay)*by)/l2,0,1);m=Math.min(m,Math.hypot(x-ax-bx*t,y-ay-by*t))}return m};// keep the line of play open
+    const near=(x,y,rr)=>{for(let a=0;a<8;a++){const s=H.surfAt(x+Math.cos(a*.785)*rr,y+Math.sin(a*.785)*rr);if(s===S_FW||s===S_GREEN||s===S_FRINGE||s===S_TEE||s===S_SAND||s===S_WATER)return true}const s=H.surfAt(x,y);return s!==S_ROUGH&&s!==S_DEEP&&s!==S_OB};
+    for(let y=H.Y0+4;y<H.Y1-2;y+=6)for(let x=H.X0+3;x<H.X1-3;x+=6){const px=x+TR.range(-2.5,2.5),py=y+TR.range(-2.5,2.5);if(Math.hypot(px,py)<30)continue;if(lineD(px,py)<(canyon?22:32))continue;if(near(px,py,canyon?9:12)||near(px,py,canyon?16:22)&&TR()<.7)continue;
+      const cl=vnoise(px*.03+7,py*.03-3);if(TR()>clamp((cl-.2)/.4,0,1)*1.1*INF)continue;const sp=pickSpecies(mix,TR());const S=SPECIES[sp];const h=lerp(S.h[0],S.h[1],TR())*TR.range(.7,1.3);const w=h*S.w*TR.range(.85,1.2);
+      if(!treeSpotOK(H,px,py,Math.min(4,w*.25)))continue;const t={x:px,y:py,sp,v:TR.int(8),h,w,cb:S.cb,r:w*.5,out:0};H.trees.push(t);if(H.addTree)H.addTree(t)}}
+}
 const LIGHT={sun:SUN_FRAME,sunCol:[1.0,.88,.70],skyTop:[.26,.47,.80],skyHor:[.68,.77,.88],fog:[.70,.78,.86],far:[.17,.27,.14]};
 function glDraw(R,cam,S){
   const gl=R.gl,cv=R.canvas,H=R.hole.H;gl.viewport(0,0,cv.width,cv.height);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);
@@ -1107,8 +1150,9 @@ function glDraw(R,cam,S){
     gl.uniform1f(u.uFoam,R.hole.H.sea.length?1:0);if(u.uDune)gl.uniform1f(u.uDune,['dunes','prairie'].includes(R.hole.H.course.style)||['pacificdunes','sandhills','friars','pinevalley'].includes(R.hole.H.course.id)?1:0);if(u.uSeaZ){const H=R.hole.H;if(H.seaZ===undefined)seaLevel(H);if(H.seaZ===undefined){const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9}gl.uniform1f(u.uSeaZ,H.seaZ)}{const H=R.hole.H;outSea(H);if(u.uOutSea)gl.uniform1f(u.uOutSea,H.outZ>-900?1:0);if(u.uOutZ)gl.uniform1f(u.uOutZ,H.outZ)}gl.uniform1f(u.uOuter,0);gl.bindVertexArray(R.hole.ter.v);gl.drawElements(gl.TRIANGLES,R.hole.ter.n,gl.UNSIGNED_INT,0);
     gl.uniform1f(u.uOuter,1);gl.uniform1f(u.uAimOn,0);gl.bindVertexArray(R.hole.outer.v);gl.drawElements(gl.TRIANGLES,R.hole.outer.n,gl.UNSIGNED_INT,0)}
   // trees (impostor billboards, alpha-tested, alpha-to-coverage)
-  {const p=R.pTree;common(p);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.uniform1i(p.u.uAtl,3);gl.disable(gl.CULL_FACE);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+  {const p=R.pTree;common(p);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.uniform1i(p.u.uAtl,3);if(p.u.uR3)gl.uniform1f(p.u.uR3,R.t3?T3R:0);gl.disable(gl.CULL_FACE);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
     const v=R.treeV;if(v.inst){gl.bindVertexArray(v.v);gl.drawArraysInstanced(gl.TRIANGLES,0,6,v.inst)}gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);gl.enable(gl.CULL_FACE)}
+  if(R.t3&&typeof t3Draw==='function')t3Draw(R,common,cam);
   // meshes: flags, pole, ball, tee
   {const p=R.pMesh,u=p.u;common(p);gl.uniform1f(u.uBallD,0);gl.disable(gl.CULL_FACE);
     const draw=(m,M,c,flag,em)=>{gl.uniformMatrix4fv(u.uM,false,M);gl.uniform3fv(u.uC,c);gl.uniform1f(u.uFlag,flag||0);gl.uniform1f(u.uEmis,em||0);gl.bindVertexArray(m.v);gl.drawElements(gl.TRIANGLES,m.n,m.it,0)};
@@ -1118,7 +1162,7 @@ function glDraw(R,cam,S){
     if(S.tee)draw(R.cyl,TRS(S.tee.x,S.tee.y,S.tee.z-.05,.006,.006,.06),[1,1,1]);
     for(const t of S.teeMarks||[]){draw(R.sphere,TRS(t.x,t.y,t.z+.08,.13,.13,.11),t.col,0,.15)}
     gl.uniform1f(u.uBallD,1);for(const b of S.extraBalls||[])draw(R.ballM,TRS(b.x,b.y,b.z+.0233,.0233,.0233,.0233),[.95,.95,.95],0,.1);
-    if(S.ballOn){const b=S.ballPos;const dE=Math.hypot(cam.eye[0]-b[0],cam.eye[1]-b[1],cam.eye[2]-b[2]);const r=Math.max(.0233,dE*.0026*(S.ballBoost||1));draw(R.ballM,TRS(b[0],b[1],b[2]+r,r,r,r),[1,1,1],0,.35)}gl.uniform1f(u.uBallD,0);
+    if(S.ballOn){const b=S.ballPos;const dE=Math.hypot(cam.eye[0]-b[0],cam.eye[1]-b[1],cam.eye[2]-b[2]);const r=Math.max(.0233,dE*.0012*Math.min(S.ballBoost||1,1.3));/* real size; only a slim minimum so a distant ball stays a visible dot */draw(R.ballM,TRS(b[0],b[1],b[2]+r,r,r,r),[1,1,1],0,.35)}gl.uniform1f(u.uBallD,0);
     gl.enable(gl.CULL_FACE)}
   // tracer (additive)
   if(R.tracerN>2){const p=R.pTr;gl.useProgram(p.p);gl.uniformMatrix4fv(p.u.uVP,false,VP);gl.uniform3fv(p.u.uTc,S.tracerCol||[1,.55,.15]);gl.uniform1f(p.u.uHead,S.tracerHead||1);
@@ -1146,11 +1190,184 @@ function outSea(H){if(H.outZ!==undefined)return H.outZ;let n=0,wn=0;const z=[];c
   for(let y=H.Y0+1;y<H.Y1-1;y+=2)for(let x=H.X0+1;x<H.X1-1;x+=2){if(Math.min(x-H.X0,H.X1-x,y-H.Y0,H.Y1-y)>20)continue;if(isW(x,y))z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.outZ=z.length?z[z.length>>1]:-1e9;return H.outZ}
 function treeSpotOK(H,x,y,r){const inB=(px,py)=>px>H.X0+.5&&px<H.X1-.5&&py>H.Y0+.5&&py<H.Y1-.5;const h2=1.6,pts=[[0,0],[r,0],[-r,0],[0,r],[0,-r],[r*.7,r*.7],[-r*.7,r*.7],[r*.7,-r*.7],[-r*.7,-r*.7],[h2,0],[-h2,0],[0,h2],[0,-h2],[2.2,0],[-2.2,0],[0,2.2],[0,-2.2]];
   const sz=H.sea.length?seaLevel(H):-1e9;
+  {const L=H.line;if(L&&L.length>1){const bx=L[1][0]-L[0][0],by=L[1][1]-L[0][1],l=Math.hypot(bx,by)||1;const t=(x*bx+y*by)/l;if(t>-10&&t<Math.min(70,l)){const d=Math.abs(x*by-y*bx)/l;if(d<8+t*.06)return false}}}// keep the tee shot's sightline open (no trees crowding the tee line)
   for(const q of pts){const px=x+q[0],py=y+q[1];if(inB(px,py)){const s=H.surfAt(px,py);if(s===S_WATER||s===S_FW||s===S_TEE||s===S_FRINGE||s===S_GREEN||s===S_SAND)return false;if(sz>-900&&H.hAt(px,py)<sz+1.4)return false}
     else{// beyond the box the renderer extends the edge mask outward and floods anything below the sea level
       const od=Math.max(H.X0-px,px-H.X1,H.Y0-py,py-H.Y1,0);if(od<75&&H.surfAt(clamp(px,H.X0+1,H.X1-1),clamp(py,H.Y0+1,H.Y1-1))===S_WATER)return false;{const oz=outSea(H);if(oz>-900&&H.demAt(px,py)<oz+1.4+Math.min(od*.004,5))return false}}}
   const polys=H.sea.concat((H.F&&H.F.wa)||[]);for(let i=0;i<5;i++){const px=x+pts[i][0],py=y+pts[i][1];for(const P of polys)if(pip(px,py,P))return false}
+  if(!inB(x,y)&&H.F){const pl=[].concat(H.F.fw||[],H.F.gr||[],H.F.te||[],H.F.bk||[]);for(let i=0;i<5;i++){const px=x+pts[i][0],py=y+pts[i][1];for(const P of pl)if(pip(px,py,P))return false}}// beyond the box: never on a neighbouring hole's fairway, green, tee or bunker
   return true}
+
+'use strict';
+/* ---------- 3D trees (v1.14) ----------
+   Real geometry near the camera: tapered, flared trunks and recursively forked branch tubes carrying instanced leaf-cluster cards
+   (broadleaf sprays, pine needle tufts, cypress scale foliage) lit with soft crown normals, wrap light, translucency and crown AO.
+   Far trees stay billboards, but the billboard atlas cells for these species are rendered FROM the same 3D meshes, so the far trees match.
+   A dithered 8 yd crossfade hands each tree from billboard to mesh (no popping). Flowers (dogwood / azalea) and palms keep their painted billboards. */
+let T3ST={cs:1,n:1,ao:1,amb:1,sun:1,br:1};// global multipliers (options sheet); 1 = shipped baseline
+// James's v1.14 baseline: per species [card size, card count] + close-range lighting (ao,amb,sun,bright) + tee-distance lighting + far thinning
+const T3P={1:{g:[1.45,1.2],N:[.6,1.15,.85,1],F:[1.2,1,1.05,1.05],thin:.5},2:{g:[1.45,1.2],N:[.6,1.15,.85,1],F:[1.2,1,1.05,1.05],thin:.5},0:{g:[.8,1.8],N:[1.8,1.,1.15,1.05],F:[1.2,1,1.05,1.05],thin:.45},7:{g:[.8,1.8],N:[1.8,1.,1.15,1.05],F:[1.2,1,1.05,1.05],thin:.45},4:{g:[1,1],N:[.6,1.15,.85,1],F:[.6,1.15,.85,1],thin:0}};
+T3P[8]={g:[1.35,1.9],N:[1,1.05,1,1],F:[1.1,1.05,1,1],thin:.15};T3P[9]={g:[1.25,1.6],N:[1,1.05,1,1],F:[1.1,1.05,1,1],thin:.15};// fuller eucalyptus / sycamore crowns
+T3P[3]={g:[1.25,1.25],N:[1.4,.95,1.,1],F:[1.3,.95,1.,1],thin:.25};
+function t3g(sp,v){if((sp===8||sp===9)&&v>=2)return[1,1];return(T3P[sp]||T3PD).g}// only half the eucalyptus / sycamore variants get the fuller crown; the rest stay naturally airy
+const T3PD={g:[1,1],N:[1,1,1,1],F:[1,1,1,1],thin:0};// render-style knobs (tree style options sheet)
+const T3SP=[0,1,2,3,4,7,8,9];const T3NV=4;const T3R=150;
+const T3LEAF={4:[.66,.78,.58],0:[.86,.96,.8],1:[.84,.9,.72],2:[.9,.95,.72],3:[.58,.7,.62],7:[.86,.96,.78],8:[.92,.95,.92],9:[.95,.98,.76]};
+const T3BARK={4:[.46,.43,.38],0:[.42,.34,.27],1:[.47,.42,.36],2:[.48,.44,.38],3:[.34,.27,.21],7:[.40,.33,.27],8:[.64,.6,.53],9:[.74,.70,.62]};
+function t3LeafTex(){const W=256,c=document.createElement('canvas');c.width=W*4;c.height=W;const g=c.getContext('2d');const R=RNG('t3leaf');
+  // cell 0: broadleaf spray: twigs + ~300 overlapping leaves, denser in the middle, ragged edge
+  g.save();g.strokeStyle='rgba(70,52,36,1)';g.lineCap='round';for(let i=0;i<7;i++){const a=R()*6.283;g.lineWidth=R.range(1.5,3);g.beginPath();g.moveTo(128,128);g.quadraticCurveTo(128+Math.cos(a+.3)*50,128+Math.sin(a+.3)*50,128+Math.cos(a)*105,128+Math.sin(a)*105);g.stroke()}
+  for(let i=0;i<330;i++){const a=R()*6.283,d=Math.pow(R(),.75)*112,x=128+Math.cos(a)*d,y=128+Math.sin(a)*d;const L=R.range(9,17),w=L*R.range(.38,.55),ro=R()*6.283;const top=(128-y)/128;
+    const l=R.range(17,31)+top*7+(d<50?-4:0);g.fillStyle=`hsl(${R.range(84,104)},${R.range(32,48)}%,${l}%)`;g.beginPath();g.ellipse(x,y,L*.5,w*.5,ro,0,6.283);g.fill();
+    if(R()<.3){g.strokeStyle=`hsla(80,30%,${l+10}%,.5)`;g.lineWidth=.7;g.beginPath();g.moveTo(x-Math.cos(ro)*L*.45,y-Math.sin(ro)*L*.45);g.lineTo(x+Math.cos(ro)*L*.45,y+Math.sin(ro)*L*.45);g.stroke()}}g.restore();
+  // cell 1: pine needle tufts radiating from short twigs
+  g.save();g.translate(W,0);g.lineCap='round';for(let t=0;t<17;t++){const a=R()*6.283,d=Math.pow(R(),.7)*70,cx=128+Math.cos(a)*d,cy=128+Math.sin(a)*d*.8;g.strokeStyle='rgba(80,58,40,1)';g.lineWidth=2.4;g.beginPath();g.moveTo(128,128);g.lineTo(cx,cy);g.stroke();
+    for(let k=0;k<60;k++){const b=R()*6.283,L=R.range(22,54);const up=Math.sin(b)<0?6:0;g.strokeStyle=`hsl(${R.range(100,124)},${R.range(22,36)}%,${R.range(13,26)+up}%)`;g.lineWidth=R.range(1.1,1.9);g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+Math.cos(b)*L,cy+Math.sin(b)*L*.85);g.stroke()}}g.restore();
+  // cell 2: cypress / juniper scale foliage: dense flattened clumps of tiny scale sprays
+  g.save();g.translate(W*2,0);for(let i=0;i<900;i++){const a=R()*6.283,d=Math.pow(R(),.6)*112,x=128+Math.cos(a)*d,y=128+Math.sin(a)*d*.62;const r=R.range(2.5,5.5);const top=(128-y)/80;
+    g.fillStyle=`hsl(${R.range(110,128)},${R.range(22,34)}%,${R.range(16,28)+top*6}%)`;g.beginPath();g.ellipse(x,y,r,r*.7,R()*3,0,6.283);g.fill()}g.restore();
+  // cell 3: palm frond segment: midrib along x with drooping leaflets on both sides
+  g.save();g.translate(W*3,0);g.lineCap='round';g.strokeStyle='hsl(70,30%,34%)';g.lineWidth=3;g.beginPath();g.moveTo(0,128);g.lineTo(256,128);g.stroke();
+  for(let i=0;i<46;i++){const x=i/46*256+R.range(-2,2);for(const sg of[-1,1]){const L=R.range(70,108)*(1-Math.abs(i/46-.5)*.35);g.strokeStyle=`hsl(${R.range(88,104)},${R.range(30,44)}%,${R.range(20,32)+(sg<0?5:0)}%)`;g.lineWidth=R.range(3,4.5);
+    g.beginPath();g.moveTo(x,128);g.quadraticCurveTo(x+L*.35,128+sg*L*.5,x+L*.55,128+sg*L*.95);g.stroke()}}g.restore();
+  return c}
+function t3Gen(sp,v){const R=RNG('t3_'+sp+'_'+v);const S=SPECIES[sp];const P=[],N=[],U=[],K=[],I=[];
+  const nrm=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l]},cr=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const add=(a,b,s)=>[a[0]+b[0]*s,a[1]+b[1]*s,a[2]+b[2]*s];
+  const tube=(a,b,r0,r1)=>{const d=nrm([b[0]-a[0],b[1]-a[1],b[2]-a[2]]);const L=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]);const t=Math.abs(d[2])<.9?[0,0,1]:[1,0,0];const u=nrm(cr(d,t)),w=cr(d,u);
+    const ns=r0>.012?8:r0>.005?6:4;const base=P.length/3;for(let e=0;e<2;e++){const c=e?b:a,r=e?r1:r0;for(let i=0;i<=ns;i++){const an=i/ns*6.2832,ca=Math.cos(an),sa=Math.sin(an);const n=[u[0]*ca+w[0]*sa,u[1]*ca+w[1]*sa,u[2]*ca+w[2]*sa];
+      P.push(c[0]+n[0]*r,c[1]+n[1]*r,c[2]+n[2]*r);N.push(n[0],n[1],n[2]);U.push(i/ns,c[2]*8);K.push(0,1)}}
+    for(let i=0;i<ns;i++){const a0=base+i,a1=a0+1,b0=base+ns+1+i,b1=b0+1;I.push(a0,a1,b1,a0,b1,b0)}};
+  const buttress=r=>{const n=4+R.int(3);for(let k=0;k<n;k++){const az=k/n*6.283+R.range(-.35,.35);const c=[Math.cos(az),Math.sin(az)];tube([c[0]*r*.6,c[1]*r*.6,R.range(.03,.05)],[c[0]*r*R.range(2.4,3.4),c[1]*r*R.range(2.4,3.4),-.004],r*R.range(.45,.6),r*.15)}};
+  const cards=[];// leaf cards: centre, size, normal hint, cell, flat
+  const card=(c,s,cell,flat,out)=>cards.push({c,s,cell,flat,out});
+  const branch=(p,d,len,r,depth,o)=>{let dd=nrm([d[0],d[1],d[2]+o.trop]);const e=add(p,dd,len);tube(p,e,r,r*o.taper);
+    if(o.mid&&depth<=o.mid)o.spots.push({p:add(p,dd,len*.55),k:.75});
+    if(depth<=0){o.spots.push({p:e,k:1});return}
+    const nk=depth>=2&&R()<o.three?3:2;for(let i=0;i<nk;i++){const t=Math.abs(dd[2])<.9?[0,0,1]:[1,0,0];const u=nrm(cr(dd,t)),w=cr(dd,u);const ph=R()*6.283+i*6.283/nk;const ang=o.spread*R.range(.75,1.25);
+      const nd=nrm(add(add(dd,u,Math.tan(ang)*Math.cos(ph)),w,Math.tan(ang)*Math.sin(ph)));branch(e,nd,len*R.range(o.lr[0],o.lr[1]),r*o.taper,depth-1,o)}};
+  const broad=sp===1||sp===2||sp===9||sp===8;const pine=sp===0||sp===7;const cyp=sp===3;
+  let spots=[];const r0={0:.016,1:.034,2:.028,3:.032,7:.018,8:.022,9:.03}[sp];
+  if(broad){
+    const th=(sp===8?R.range(.3,.42):sp===9?R.range(.24,.32):sp===1?R.range(.15,.24):R.range(.2,.28));const lean=[R.range(-.04,.04),R.range(-.04,.04)];
+    const tr=R.range(.8,1.25);tube([0,0,0],[0,0,.035],r0*tr*1.75,r0*tr*1.05);buttress(r0*tr);// root flare + buttress roots
+    let a=[0,0,.035];const nseg=5;for(let i=1;i<=nseg;i++){const b=[lean[0]*i/nseg+R.range(-.01,.01),lean[1]*i/nseg+R.range(-.01,.01),.035+(th-.035)*i/nseg];tube(a,b,r0*tr*(1-.28*(i-1)/nseg),r0*tr*(1-.28*i/nseg));a=b}
+    const o={trop:sp===8?.3:sp===2?.2:.1,taper:.7,spots,mid:sp===8&&v>=2?0:1,three:sp===1?.6:.4,spread:sp===1?.62:sp===8?.42:.5,lr:sp===1?[.62,.8]:[.62,.76]};
+    const nL=sp===1?4+(R()<.5?1:0):sp===8?3+(R()<.5?1:0):3+(R()<.6?1:0);const crown=1-th;
+    for(let i=0;i<nL;i++){const az=i/nL*6.283+R.range(-.4,.4),el=(sp===1?R.range(.55,.95):sp===2?R.range(.35,.6):sp===8?R.range(.2,.45):R.range(.5,.85));
+      branch(a,[Math.sin(el)*Math.cos(az),Math.sin(el)*Math.sin(az),Math.cos(el)],crown*(sp===1?.36:.33)*R.range(.85,1.12),r0*.7,sp===8&&v>=2?2:3,o)}
+    if(sp!==1)branch(a,[0,0,1],crown*.34,r0*.6,2,o);// leader
+  } else if(pine){
+    const lob=sp===0;const cb=lob?R.range(.55,.68):R.range(.32,.46);const wind=lob?0:R.range(.15,.4);const wd=R()*6.283;
+    const rr=r0*R.range(.8,1.3),bend=R.range(.006,.02),ph=R()*6.283;tube([0,0,0],[0,0,.035],rr*1.9,rr*1.1);buttress(rr*.8);let a=[0,0,.035];for(let i=1;i<=8;i++){const z=.035+.935*i/8;const b=[Math.sin(i*.9+ph)*bend+(lob?0:Math.cos(wd)*.04*i/8),Math.cos(i*.7+ph)*bend+(lob?0:Math.sin(wd)*.04*i/8),z];tube(a,b,rr*Math.pow(1-.8*(i-1)/8,1.2),rr*Math.pow(1-.8*i/8,1.2));a=b}
+    {const ns=R.int(5)+2;for(let k=0;k<ns;k++){const z=R.range(.2,cb-.03),az=R()*6.283;const p0=[0,0,z];tube(p0,add(p0,[Math.cos(az),Math.sin(az),R.range(-.3,.1)],R.range(.02,.05)),.0035,.0012)}}// dead branch stubs on the bare trunk
+    const levels=lob?R.int(3)+8:R.int(3)+7;const cR=S.w*.5;
+    for(let l=0;l<levels;l++){const f=(l+R.range(.1,.9))/levels;const z=cb+(0.95-cb)*f;const env=lob?Math.sin(Math.PI*Math.min(1,.18+f*.9)):(1-f*.55);const nb=R.int(3)+3;
+      for(let k=0;k<nb;k++){if(R()<.15)continue;const az=R()*6.283;const bias=lob?1:1+wind*Math.cos(az-wd)*1.6;const len=cR*env*R.range(.6,1.1)*bias;if(len<.03)continue;
+        const el=Math.PI/2-R.range(.05,.4)+(f<.3?R.range(0,.25):0);const d=[Math.sin(el)*Math.cos(az),Math.sin(el)*Math.sin(az),Math.cos(el)];const p0=[Math.sin(z*1.7*6/0.94+v)*.006,0,z];
+        const e=add(p0,d,len);tube(p0,e,.004,.0018);
+        for(let q=0;q<3;q++){const t=q===0?1:R.range(.55,.95);spots.push({p:add(add(p0,d,len*t),[0,0,1],R.range(-.01,.03)),k:.8+.2*t,pine:1})}
+        if(len>cR*.4){const t=R.range(.35,.6),pm=add(p0,d,len*t);const sd=nrm([d[0]+R.range(-.6,.6),d[1]+R.range(-.6,.6),d[2]+.3]);const e2=add(pm,sd,len*.35);tube(pm,e2,.003,.0015);spots.push({p:e2,k:.85,pine:1})}}}
+    for(let q=0;q<3;q++)spots.push({p:[a[0]+R.range(-.02,.02),a[1]+R.range(-.02,.02),.95+R.range(-.02,.02)],k:1,pine:1});
+  } else if(cyp){// Monterey cypress: gnarled, often multi-stemmed trunk, limbs swept downwind, dense dark wind-sculpted crown in irregular flat-topped tiers
+    const wd=R()*6.283,lean=R.range(.1,.28);const ns=1+(R()<.55?1:0)+(R()<.25?1:0);const tops=[];
+    tube([0,0,0],[0,0,.03],r0*2.,r0*1.2);buttress(r0*1.1);
+    for(let k=0;k<ns;k++){const az=wd+R.range(-1.,1.)+(k?R.range(-1.2,1.2):0);let a=[0,0,.03];const ht=R.range(.32,.5);for(let i=1;i<=4;i++){const t=i/4;const b=[Math.cos(az)*lean*ht*t+R.range(-.02,.02),Math.sin(az)*lean*ht*t+R.range(-.02,.02),.03+ht*t];tube(a,b,r0*(ns>1?.8:1)*(1-.3*(i-1)/4),r0*(ns>1?.8:1)*(1-.3*i/4));a=b}tops.push(a)}
+    const o={trop:.05,taper:.66,spots,mid:2,three:.6,spread:.6,lr:[.6,.8]};
+    for(const tp of tops){const nL=4+R.int(3);for(let i=0;i<nL;i++){const az=wd+R.range(-2.2,2.2),el=R.range(.7,1.35);const dn=Math.cos(az-wd);branch(tp,[Math.sin(el)*Math.cos(az),Math.sin(el)*Math.sin(az),Math.cos(el)],R.range(.2,.32)*(1+.35*dn),r0*.6,3,o)}}
+    // low side limbs at several heights, so the crown is a mass of tiers rather than one umbrella
+    for(let k=0;k<4;k++){const tp=tops[k%tops.length];const z=R.range(.18,tp[2]-.04);const f=z/tp[2];const p0=[tp[0]*f,tp[1]*f,z];const az=wd+R.range(-2.,2.);branch(p0,[Math.cos(az),Math.sin(az),R.range(.0,.35)],R.range(.14,.24),r0*.4,2,o)}
+  }
+  else if(sp===4){// palms, four real types by variant: 0 Washingtonia (tall, thin, dense crown + brown skirt), 1 sabal / cabbage (rough booted trunk, round crown), 2 royal (smooth grey swollen column, green crownshaft, long arching fronds), 3 date (thick patterned trunk, huge stiff crown)
+    const ty=v%4;const PT=[{top:.9,r:.011,sw:1.7,nf:[30,40],L:[.14,.17],up:.9,dr:.9,dead:[8,12],shaft:0},{top:.76,r:.016,sw:1.35,nf:[24,32],L:[.19,.23],up:.8,dr:1.1,dead:[3,6],shaft:0},{top:.74,r:.019,sw:1.25,nf:[16,22],L:[.24,.29],up:.7,dr:1.3,dead:[0,2],shaft:.1},{top:.64,r:.027,sw:1.45,nf:[34,44],L:[.22,.27],up:1.0,dr:.85,dead:[5,9],shaft:0}][ty];
+    const lean=R.range(.0,ty===0?.05:.1),wd=R()*6.283,cv=R.range(-.5,1.);let a=[0,0,0];const nsg=14;
+    for(let i=1;i<=nsg;i++){const t=i/nsg;const b=[Math.cos(wd)*lean*(t*t*cv+t*(1-cv)),Math.sin(wd)*lean*(t*t*cv+t*(1-cv)),PT.top*t];const rf=t0=>{const sw=1+(PT.sw-1)*Math.exp(-t0*14);const bul=ty===2?1+.18*Math.exp(-Math.pow((t0-.45)*4,2)):1;return PT.r*sw*bul*(1-.25*t0)};tube(a,b,rf((i-1)/nsg),rf(t));a=b}
+    if(PT.shaft){const b=add(a,[0,0,1],PT.shaft);tube(a,b,PT.r*.85,PT.r*.7);a=b}// royal crownshaft
+    const frond=(az,up,L,dead)=>{const dir=[Math.cos(az),Math.sin(az)];const lat=[-dir[1],dir[0],0];const SG=8;const curl=R.range(.2,.5);const twist=R.range(-.3,.3);
+      const pt=t=>{const z=(up*.6*t-PT.dr*t*t*.75-curl*Math.max(0,t-.75)*1.0)*L;const rr=L*t*(1-.12*t*t);return[a[0]+dir[0]*rr,a[1]+dir[1]*rr,a[2]+z]};
+      for(let k=0;k<SG;k++){const t0=k/SG,t1=(k+1)/SG;const seg=[[pt(t0),t0],[pt(t1),t1]];const wf=t=>L*(dead?.1:.17)*Math.sin(Math.PI*Math.min(1,.08+t*.97));const fold=.45+twist*.3;
+        for(const sg of[-1,1]){const base=P.length/3;const sn=nrm([lat[0]*sg*.55+dir[0]*.15,lat[1]*sg*.55+dir[1]*.15,1]);
+          for(const [q,t] of seg){const w=wf(t);P.push(q[0],q[1],q[2]);N.push(sn[0],sn[1],sn[2]);U.push(.75+t*.25,.5);K.push(dead?2:1,.55+.45*t);
+            P.push(q[0]+lat[0]*w*sg,q[1]+lat[1]*w*sg,q[2]-w*fold);N.push(sn[0],sn[1],sn[2]);U.push(.75+t*.25,sg<0?0:1);K.push(dead?2:1,.5+.5*t)}
+          I.push(base,base+1,base+3,base,base+3,base+2)}}
+      tube(a,pt(.15),.0035,.002)};// petiole
+    const nf=R.int(PT.nf[1]-PT.nf[0])+PT.nf[0];for(let f=0;f<nf;f++){const az=f*2.39996+R.range(-.12,.12);const ring=f/nf;const up=lerp(PT.up*2.4,-.1,ring)+R.range(-.25,.25);frond(az,up,R.range(PT.L[0],PT.L[1])*(ring<.15?.65:1),0)}
+    const nd=R.int(PT.dead[1]-PT.dead[0]+1)+PT.dead[0];for(let f=0;f<nd;f++){const az=R()*6.283;frond(az,-2.6-R.range(0,1),R.range(PT.L[0],PT.L[1])*(ty===0?.55:.45),1)}// dead fronds hanging under the crown
+    if(ty===1)for(let k=0;k<10;k++){const z=R.range(.15,PT.top-.05),az=R()*6.283;const p0=[Math.cos(wd)*lean*z,Math.sin(wd)*lean*z,z];tube(p0,add(p0,[Math.cos(az),Math.sin(az),.6],.025),.006,.003)}// sabal boots
+    spots.push({p:a,k:1})}
+  // fit the crown: horizontal radius to S.w/2, top of foliage at ~0.97
+  const cs={0:.1,1:.15,2:.14,3:.16,4:.1,7:.105,8:.09,9:.13}[sp];
+  let rmax=.01,zmax=.01;for(const s of spots){rmax=Math.max(rmax,Math.hypot(s.p[0],s.p[1]));zmax=Math.max(zmax,s.p[2])}
+  const kx=sp===4?1:Math.min(1.5,Math.max(.7,(S.w*.5-cs*.5)/rmax)),kz=sp===4?1:Math.min(1.3,(.97-cs*.45)/zmax);
+  for(let i=0;i<P.length;i+=3){P[i]*=kx;P[i+1]*=kx;P[i+2]*=kz}for(const s of spots){s.p=[s.p[0]*kx,s.p[1]*kx,s.p[2]*kz]}
+  // crown centre / radius for soft normals and AO
+  let cx=0,cy=0,cz=0;for(const s of spots){cx+=s.p[0];cy+=s.p[1];cz+=s.p[2]}cx/=spots.length;cy/=spots.length;cz/=spots.length;let cr0=0;for(const s of spots)cr0+=Math.hypot(s.p[0]-cx,s.p[1]-cy,(s.p[2]-cz)*1.3);cr0/=spots.length;
+  for(const s of spots){if(sp===4)break;const n=s.pine?4:cyp?12+R.int(5):s.k<1?4:(sp===1||sp===2?7:5);const nn=Math.max(1,Math.round(n*T3ST.n*t3g(sp,v)[1]));for(let i=0;i<nn;i++){const j=cyp?[R.range(-1,1)*cs*.9,R.range(-1,1)*cs*.9,R.range(-.45,.3)*cs]:[R.range(-.5,.5)*cs,R.range(-.5,.5)*cs,R.range(-.4,.4)*cs];
+    card(add(s.p,j,1),cs*T3ST.cs*t3g(sp,v)[0]*R.range(.8,1.2)*(s.k<1?1.1:1),s.pine?1:cyp?2:0,s.pine?(i<2):cyp?R()<.8:false)}}
+  for(const c of cards){const p=c.c;const rel=[p[0]-cx,p[1]-cy,(p[2]-cz)*1.3];const dist=Math.hypot(...rel)/cr0;const soft=nrm(add(nrm(rel),[0,0,1],.35));const ao=Math.min(1,.18+.7*Math.min(1.2,dist)*Math.min(1.2,dist));
+    let n;if(c.flat)n=nrm([R.range(-.35,.35),R.range(-.35,.35),1]);else{const q=nrm([R.range(-1,1),R.range(-1,1),R.range(-1,1)]);n=nrm(add(q,soft,.7))}
+    const t0=Math.abs(n[2])<.95?[0,0,1]:[1,0,0];const ta=nrm(cr(n,t0)),tb=cr(n,ta);const rot=R()*6.283,ca=Math.cos(rot),sa=Math.sin(rot);const A=add(add([0,0,0],ta,ca),tb,sa),B=add(add([0,0,0],ta,-sa),tb,ca);
+    const s=c.s*.5;const base=P.length/3;const u0=c.cell/4;
+    for(const [i,j] of [[-1,-1],[1,-1],[1,1],[-1,1]]){P.push(p[0]+A[0]*s*i+B[0]*s*j,p[1]+A[1]*s*i+B[1]*s*j,p[2]+A[2]*s*i+B[2]*s*j);N.push(soft[0],soft[1],soft[2]);U.push(u0+(i*.5+.5)/4,j*.5+.5);K.push(1+R()*.4,ao)}
+    I.push(base,base+1,base+2,base,base+2,base+3)}
+  return{P:new Float32Array(P),N:new Float32Array(N),U:new Float32Array(U),K:new Float32Array(K),I:P.length/3>65000?new Uint32Array(I):new Uint16Array(I)}}
+function t3Init(R,prog,vao){const gl=R.gl;
+  R.pT3=prog(`
+layout(location=0) in vec3 aP;layout(location=1) in vec3 aN;layout(location=2) in vec2 aUV;layout(location=5) in vec2 aK;layout(location=3) in vec4 iP;layout(location=4) in vec4 iW;
+uniform mat4 uVP;uniform float uTime;uniform vec3 uEye;uniform float uR3;out vec3 vP;out vec3 vN;out vec2 vUV;out vec2 vK;out float vTint;out float vFade;out float vH;
+void main(){vec3 p=aP;p.xy*=iW.x;p.z*=iP.w;p.x+=iW.z*aP.z*aP.z*iP.w*.25;float sw=sin(uTime*1.2+iP.x*.31+iP.y*.23)*.012*aP.z*aP.z*iP.w;float fl=aK.x*sin(uTime*2.3+aP.x*31.+aP.y*17.)*.03*iP.w*.08;p.x+=sw+fl;p.y+=sw*.6;
+ float c=cos(iW.y),s=sin(iW.y);vec3 q=vec3(c*p.x-s*p.y,s*p.x+c*p.y,p.z);vN=normalize(vec3(c*aN.x-s*aN.y,s*aN.x+c*aN.y,aN.z));vP=iP.xyz+q;vUV=vec2(aUV.x+(aK.x>.5?0.:iW.w*7.3),aUV.y*(aK.x>.5?1.:iP.w*.12)+(aK.x>.5?0.:iW.w*13.1));vK=aK;vTint=iW.w;vH=aP.z;
+ vFade=uR3>0.?step(length(iP.xy-uEye.xy),uR3):1.;gl_Position=uVP*vec4(vP,1.);}`,`
+${GLSL_COMMON}
+in vec3 vP;in vec3 vN;in vec2 vUV;in vec2 vK;in float vTint;in float vFade;in float vH;out vec4 o;uniform sampler2D uLeaf;uniform sampler2D uNoise;uniform vec3 uLeafCol;uniform vec3 uBark;uniform float uImp;uniform vec2 uBk;uniform vec4 uSt;uniform vec4 uStF;uniform float uThin;
+void main(){if(vFade<.5)discard;vec3 N=normalize(vN);vec3 alb;float ao=vK.y;float lit;vec3 col;
+ float dk=smoothstep(25.,70.,length(vP.xy-uEye.xy));vec4 St=mix(uSt,uStF,dk);if(vK.x>.5&&vK.x<1.5&&fract(vK.x)*2.5<dk*uThin)discard;// tee-distance look: thinner, airier crowns (per-card, stable, gradual)
+ if(vK.x>.5){vec4 t=texture(uLeaf,vUV);if(t.a<.5)discard;alb=pow(t.rgb/max(t.a,.001),vec3(2.2))*uLeafCol*mix(.84,1.16,vTint);if(vK.x>1.5){float lm=dot(alb,vec3(.33));alb=vec3(lm)*vec3(2.0,1.35,.8)*1.1;}
+   float w=clamp(dot(N,uSun)*.55+.45,0.,1.);lit=w*w;vec3 amb=mix(uSkyHor*.42,uSkyTop*.6,N.z*.5+.5);vec3 V=normalize(vP-uEye);float tr=pow(max(dot(V,uSun),0.),4.)*.55;
+   if(uImp>.5){o=vec4(pow(clamp(alb*(.5+.62*lit)*mix(.55,1.05,ao)*2.2,0.,1.),vec3(1./2.2)),1.);return;}
+   float a2=pow(ao,St.x);col=alb*(amb*(.5+.5*a2)*1.05*St.y+uSunCol*(lit*a2*a2*.95*St.z+tr*(.5+.5*a2)))*St.w;}
+ else{float f=texture(uNoise,vec2(vUV.x*1.2,vUV.y*.35)).r*.5+texture(uNoise,vec2(vUV.x*2.6,vUV.y*.9)+.3).g*.3+texture(uNoise,vec2(vUV.x*6.,vUV.y*2.2)+.7).b*.2;float fis=smoothstep(.38,.62,f);alb=pow(uBark,vec3(2.2))*mix(.55,1.12,fis)*mix(.9,1.1,vTint);if(uBk.y>.5){float pe=smoothstep(.45,.6,texture(uNoise,vec2(vUV.x*.8,vUV.y*.12)+.5).r);alb=pow(uBark,vec3(2.2))*mix(.92,1.04,f)*mix(vec3(1.),vec3(.78,.7,.6),pe*.7)*mix(.9,1.08,vTint);}if(uBk.x>.5){float rg=fract(vUV.y*5.);alb=pow(uBark,vec3(2.2))*(.78+.22*smoothstep(.0,.35,rg)*smoothstep(1.,.6,rg))*mix(.85,1.1,f)*mix(.9,1.1,vTint);}
+   float l=max(dot(N,uSun),0.);float base=smoothstep(0.,.08,vH);alb*=mix(.7,1.,base);
+   if(uImp>.5){o=vec4(pow(clamp(alb*(.55+.6*l)*2.2,0.,1.),vec3(1./2.2)),1.);return;}
+   vec3 Ak=mix(uSkyHor*.4,uSkyTop*.5,N.z*.5+.5)*1.1;Ak=mix(vec3(dot(Ak,vec3(.333)))*vec3(1.08,1.,.88)*1.18,Ak,.35);col=alb*(Ak+uSunCol*l*1.1);}// bark ambient: neutral-warm bounce instead of blue sky tint, lifts shaded trunks
+ col=fogit(col,vP);o=vec4(pow(tm(col),vec3(1./2.2)),1.);}`);
+  // leaf texture
+  const lt=t3LeafTex();R.t3leaf=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,R.t3leaf);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,lt);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+  gl.generateMipmap(gl.TEXTURE_2D);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  // meshes
+  R._t3vao=vao;t3Rebuild(R)}
+function t3Rebuild(R){const vao=R._t3vao;
+  R.t3=[];for(const sp of T3SP)for(let v=0;v<T3NV;v++){const m=t3Gen(sp,v);const va=vao([{loc:0,n:3,d:m.P},{loc:1,n:3,d:m.N},{loc:2,n:2,d:m.U},{loc:5,n:2,d:m.K},{loc:3,n:4,d:new Float32Array(4),inst:1,dyn:1},{loc:4,n:4,d:new Float32Array(4),inst:1,dyn:1}],m.I);
+    R.t3.push({sp,v,va,cnt:0,tris:m.I.length/3})}
+  t3Bake(R);R.t3key=''}
+function t3St(gl,u,sp){const P=T3P[sp]||T3PD,m=[T3ST.ao,T3ST.amb,T3ST.sun,T3ST.br];if(u.uSt)gl.uniform4f(u.uSt,...P.N.map((v,i)=>v*m[i]));if(u.uStF)gl.uniform4f(u.uStF,...P.F.map((v,i)=>v*m[i]));if(u.uThin)gl.uniform1f(u.uThin,P.thin)}
+function t3Uniforms(R,p){const gl=R.gl;gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,R.t3leaf);gl.uniform1i(p.u.uLeaf,4);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,R.noise);if(p.u.uNoise)gl.uniform1i(p.u.uNoise,2)}
+function t3Bake(R){// render the 3D meshes into the billboard atlas cells of their species, so far billboards match the near meshes
+  const gl=R.gl,p=R.pT3,u=p.u;const TS=ATL.ts||1;const cw=Math.round(ATL.cw*TS),ch=Math.round(ATL.ch*TS);
+  const fb=gl.createFramebuffer(),tx=gl.createTexture(),db=gl.createRenderbuffer();gl.bindTexture(gl.TEXTURE_2D,tx);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,cw,ch,0,gl.RGBA,gl.UNSIGNED_BYTE,null);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.bindRenderbuffer(gl.RENDERBUFFER,db);gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT16,cw,ch);gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tx,0);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,db);
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE){gl.bindFramebuffer(gl.FRAMEBUFFER,null);return}
+  gl.useProgram(p.p);t3Uniforms(R,p);gl.uniform1f(u.uImp,1);gl.uniform1f(u.uR3,0);gl.uniform1f(u.uTime,0);gl.uniform3fv(u.uSun,[-.45,-.55,.7]);gl.uniform3fv(u.uEye,[0,-1000,0]);
+  gl.viewport(0,0,cw,ch);gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.disable(gl.BLEND);gl.clearColor(0,0,0,0);
+  for(const g of R.t3){const S=SPECIES[g.sp];const xr=.5*ATL.cw/S.thpx,zr=.5*ATL.ch/S.thpx,zc=(ATL.ch*.5-4)/S.thpx;
+    gl.uniformMatrix4fv(u.uVP,false,new Float32Array([1/xr,0,0,0, 0,0,.5,0, 0,-1/zr,0,0, 0,zc/zr,0,1]));gl.uniform3fv(u.uLeafCol,T3LEAF[g.sp]);gl.uniform3fv(u.uBark,T3BARK[g.sp]);if(u.uBk)gl.uniform2f(u.uBk,g.sp===4?1:0,0);t3St(gl,u,g.sp);
+    for(const flip of [0,1]){const vv=g.v+flip*4;const cell=g.sp*ATL.nv+vv;if(vv>=ATL.nv)continue;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+      gl.bindBuffer(gl.ARRAY_BUFFER,g.va.attrs[4].buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,0,0,1]),gl.DYNAMIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,g.va.attrs[5].buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([1,flip?Math.PI:0,0,.5]),gl.DYNAMIC_DRAW);
+      gl.bindVertexArray(g.va.v);gl.drawElementsInstanced(gl.TRIANGLES,g.va.n,g.va.it,0,1);
+      gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.copyTexSubImage2D(gl.TEXTURE_2D,0,Math.round((cell%ATL.cols)*ATL.cw*TS),Math.round(Math.floor(cell/ATL.cols)*ATL.ch*TS),0,0,cw,ch)}}
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.bindVertexArray(null);gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.generateMipmap(gl.TEXTURE_2D);gl.deleteFramebuffer(fb);gl.deleteRenderbuffer(db);gl.deleteTexture(tx);R.t3baked=1}
+function t3List(R,all,H){// per-tree mesh instance data (same size/variation as the billboard so the crossfade matches)
+  const L=[];all.forEach((t,i)=>{if(!T3SP.includes(t.sp))return;const inR=t.x>H.X0&&t.x<H.X1&&t.y>H.Y0&&t.y<H.Y1;const hv=.86+.28*hash2(i,19),wv=.8+.42*hash2(i,13);const h=t.h*hv;
+    const lean=(t.sp===3||t.sp===7?.5:.18)*(hash2(i,31)-.5);L.push({x:t.x,y:t.y,z:(inR?H.hAt(t.x,t.y):H.demAt(t.x,t.y)-.15)-.15,h,xs:h*wv*.94,rot:hash2(i,41)*6.2832,lean,tint:hash2(i,7),g:T3SP.indexOf(t.sp)*T3NV+(t.v%T3NV)})});R.t3list=L;R.t3key=''}
+function t3Draw(R,common,cam){const gl=R.gl;if(!R.t3||!R.t3list)return;const e=cam.eye;const f=[cam.at[0]-e[0],cam.at[1]-e[1]];const fl=Math.hypot(f[0],f[1])||1;f[0]/=fl;f[1]/=fl;
+  const key=Math.round(e[0]/1.5)+','+Math.round(e[1]/1.5)+','+Math.round(Math.atan2(f[1],f[0])*12);
+  if(key!==R.t3key){R.t3key=key;const B=R.t3.map(()=>[]);for(const t of R.t3list){const dx=t.x-e[0],dy=t.y-e[1];const d=Math.hypot(dx,dy);if(d>T3R+1)continue;if(d>12&&(dx*f[0]+dy*f[1])<-t.h*.6)continue;B[t.g].push(t.x,t.y,t.z,t.h,t.xs,t.rot,t.lean,t.tint)}
+    R.t3.forEach((g,i)=>{const a=B[i];g.cnt=a.length/8;if(!g.cnt)return;const ip=new Float32Array(g.cnt*4),iw=new Float32Array(g.cnt*4);for(let k=0;k<g.cnt;k++){for(let j=0;j<4;j++){ip[k*4+j]=a[k*8+j];iw[k*4+j]=a[k*8+4+j]}}
+      gl.bindBuffer(gl.ARRAY_BUFFER,g.va.attrs[4].buf);gl.bufferData(gl.ARRAY_BUFFER,ip,gl.DYNAMIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,g.va.attrs[5].buf);gl.bufferData(gl.ARRAY_BUFFER,iw,gl.DYNAMIC_DRAW)})}
+  const p=R.pT3,u=p.u;common(p);t3Uniforms(R,p);gl.uniform1f(u.uImp,0);gl.uniform1f(u.uR3,T3R);gl.disable(gl.CULL_FACE);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+  for(const g of R.t3){if(!g.cnt)continue;gl.uniform3fv(u.uLeafCol,T3LEAF[g.sp]);gl.uniform3fv(u.uBark,T3BARK[g.sp]);if(u.uBk)gl.uniform2f(u.uBk,g.sp===4?1:0,0);t3St(gl,u,g.sp);gl.bindVertexArray(g.va.v);gl.drawElementsInstanced(gl.TRIANGLES,g.va.n,g.va.it,0,g.cnt)}
+  gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);gl.enable(gl.CULL_FACE);gl.bindVertexArray(null)}
 
 'use strict';
 /* ================= core game ================= */
@@ -1308,8 +1525,8 @@ function camAddress(){const b=G.ball,H=G.H,h=H.hAt(b.x,b.y),ax=Math.cos(G.aim),a
     const back=clamp(2.4+d*.09,2.4,7),up=clamp(.85+d*.05,.85,3.2);const look=Math.min(d,14);
     return{eye:v3(b.x-ax*back,b.y-ay*back,h+up),at:v3(b.x+ax*look,b.y+ay*look,H.hAt(b.x+ax*look,b.y+ay*look)),fov:.78}}
   if(G.view===1){const r=G.ring||{x:b.x+ax*150,y:b.y+ay*150};const lx=r.x,ly=r.y;const d=Math.hypot(lx-b.x,ly-b.y);return{eye:v3(b.x-ax*25,b.y-ay*25,h+Math.max(30,d*.42)),at:v3(lerp(b.x,lx,.75),lerp(b.y,ly,.75),0),fov:.85}}
-  {const tg0=G.ring||{x:b.x+ax*150,y:b.y+ay*150};const d0=Math.hypot(tg0.x-b.x,tg0.y-b.y);if(d0<70){// short game (chips, pitches, bunker shots): low natural camera just behind and above the ball
-    const bk=3.3+d0*.03,up=1.25+d0*.014,tx=b.x+ax*d0,ty=b.y+ay*d0;const ez=Math.max(h+up,H.hAt(b.x-ax*bk,b.y-ay*bk)+1.1);return{eye:v3(b.x-ax*bk,b.y-ay*bk,ez),at:v3(tx,ty,H.hAt(tx,ty)+.2),fov:clamp(.62+(70-d0)*.002,.62,.74)}}}
+  {const dc=Math.hypot(H.cup.x-b.x,H.cup.y-b.y);const tg0=G.ring||(dc<70&&G.club!==PUTTER?{x:H.cup.x,y:H.cup.y}:{x:b.x+ax*150,y:b.y+ay*150});const d0=Math.hypot(tg0.x-b.x,tg0.y-b.y);if(d0<70){// short game (chips, pitches, bunker shots): low natural camera just behind and above the ball
+    const bk=3.3+d0*.03,up=1.25+d0*.014,tx=b.x+ax*d0,ty=b.y+ay*d0;const ez=Math.max(h+up,H.hAt(b.x-ax*bk,b.y-ay*bk)+1.1);const gzT=Math.min(H.hAt(tx,ty),H.hAt(H.cup.x,H.cup.y));const pitch=-d0*.035;return{eye:v3(b.x-ax*bk,b.y-ay*bk,ez),at:v3(tx,ty,gzT-pitch),fov:clamp(.66+(70-d0)*.002,.66,.78)}}}// pitched down: green + flag fill the lower-middle of the frame, horizon still in view
   const tgt=G.ring||{x:b.x+ax*150,y:b.y+ay*150};const dd=clamp(Math.hypot(tgt.x-b.x,tgt.y-b.y),30,260);const tx=b.x+ax*dd,ty=b.y+ay*dd;const bk=5.4+dd*.025,up=2.8+dd*.028;return{eye:v3(b.x-ax*bk,b.y-ay*bk,h+up),at:v3(tx,ty,Math.max(H.hAt(tx,ty)+1,h+up-dd*.055)),fov:clamp(2*Math.atan(40/dd),.5,.8)}}
 function camSnap(){G.cam=camAddress();G.camT=null}
 function camLerp(c,t,k){for(let i=0;i<3;i++){c.eye[i]=lerp(c.eye[i],t.eye[i],k);c.at[i]=lerp(c.at[i],t.at[i],k)}c.fov=lerp(c.fov,t.fov,k)}
@@ -1337,8 +1554,8 @@ function updCam(dt){
     if(carry<=95){// low chase cam for short shots: behind and a little above the ball, tracking it (no bird's-eye)
       if(!a.cam0)a.cam0={eye:(G.cam?G.cam.eye:camAddress().eye).slice()};const c0=a.cam0;const f2=smooth(Math.min(1,a.t/1.1));const cx=bp[0]-ax*6.5,cy=bp[1]-ay*6.5;const gz=H.hAt(cx,cy);const bz=H.hAt(bp[0],bp[1]);const cz=Math.max(gz+1.3,Math.min(gz+1.3+(bp[2]-bz)*.35,gz+4.2));a.chase=1;
       ex=lerp(c0.eye[0],cx,f2);ey=lerp(c0.eye[1],cy,f2);ez=Math.max(lerp(c0.eye[2],cz,f2),H.hAt(ex,ey)+1.1)}
-    const k=1-Math.exp(-dt*8);const at=a.chase?v3(bp[0]+ax*3,bp[1]+ay*3,lerp(bp[2],H.hAt(bp[0],bp[1]),.45)):v3(bp[0],bp[1],bp[2]);if(!G.cam)G.cam=camAddress();
-    G.cam.eye=[ex,ey,ez];G.cam.at=G.cam.at.map((v,i)=>lerp(v,at[i],k));G.cam.fov=lerp(G.cam.fov,.66,dt*.8);return}
+    const k=1-Math.exp(-dt*8);const at=a.chase?v3(bp[0]+ax*1.5,bp[1]+ay*1.5,lerp(bp[2],H.hAt(bp[0],bp[1]),.18)):v3(bp[0],bp[1],bp[2]);// chase: tilt up with the ball so it stays in frameif(!G.cam)G.cam=camAddress();
+    G.cam.eye=[ex,ey,ez];G.cam.at=G.cam.at.map((v,i)=>lerp(v,at[i],a.chase?1-Math.exp(-dt*14):k));G.cam.fov=lerp(G.cam.fov,a.chase?.8:.66,dt*.8);return}
   if(G.phase==='address'||G.phase==='putt'||G.phase==='swing'){const t=camAddress();if(!G.cam)G.cam=t;camLerp(G.cam,t,1-Math.exp(-dt*9));return}
   if(G.phase==='holed'||G.phase==='rest'){if(G.cam){const t=G.cam;t.at=t.at.slice()}}}
 function startIntro(){const H=G.H;G.phase='intro';G.intro={t:0,T:clamp(3+H.yards/160,3.6,6.5)};
@@ -1374,7 +1591,7 @@ function frame(now){requestAnimationFrame(frame);const _t0=performance.now();
   if(G.phase==='flight'&&G.anim.put)S.putt=.5;
   if((G.phase==='flight'||G.phase==='replay')&&G.anim&&(G.tracerOn||G.anim.put)){// trail = the ball's real sampled path (flight, then roll / putt break), head pinned to the interpolated ball position
     const a=G.anim;const k=Math.min(a.n,2999,Math.floor(a.t*60)+2);if(k>=2){const tmp=a.P.subarray(0,k*3).slice();tmp[(k-1)*3]=bp[0];tmp[(k-1)*3+1]=bp[1];tmp[(k-1)*3+2]=bp[2];glTracer(G.R,tmp,k,G.cam.eye,1,a.put?0:(a.flightN||k),G.H)}}
-  S.tracerHead=1;S.ballBoost=G.phase==='flight'?1.6:1;
+  S.tracerHead=1;S.ballBoost=1;
   resize();glDraw(G.R,G.cam,S);
   G.VP=G.R.lastVP;
   if(G.labels)drawLabels();
@@ -1408,7 +1625,7 @@ function updHUD(){const H=G.H;if(!H)return;const b=G.ball;const isR=G.mode==='ro
   const pu=G.phase==='putt';$('putt').style.display=pu?'block':'none';
   for(const id of['meter','strike','shape','hint'])$(id).classList.toggle('hide',pu||G.phase==='intro');
   $('rec').innerHTML=G.rec?'Recommended: <b>'+recText()+'</b>':'';$('rec').classList.toggle('hide',pu||G.phase==='intro');
-  if(pu){$('pInfo').textContent='CUP '+Math.round(d*3)+' FT · TAP TO START · TAP TO STRIKE';G.puttMax=Math.max(20,Math.ceil(d*3*1.6/5)*5);$('pCup').style.left=clamp(d*3/G.puttMax*100,0,100)+'%'}
+  if(pu){$('pInfo').textContent='CUP '+Math.round(d*3)+' FT · TAP TO START · TAP TO STRIKE';G.puttMax=puttMaxFor(G.ball,G.H);$('pCup').style.left=clamp(d*3/G.puttMax*100,0,100)+'%'}
   fillLM()}
 function recText(){const r=G.rec,b=G.ball;if(!r||r.ci===PUTTER)return r?r.txt:'';const c=clubCarry(r.ci,r.pwPhys||r.pw,b.surf===S_GREEN?S_FW:b.surf,G.wind||{x:0,y:0},G.aim);
   const extra=/lay up/.test(r.txt)?' · lay up':(G.recForced&&r.ci<13?' · must carry':G.recFront&&r.ci<13?' · '+G.recFront+' to front':'');return CN[r.ci]+(r.pw<.99?' '+Math.round(r.pw*100)+'%':'')+' · '+Math.round(c.carry)+' carry / '+Math.round(c.total)+' total'+extra}
@@ -1458,6 +1675,14 @@ function project(x,y,z){const M=G.R.lastVP;if(!M)return null;const X=M[0]*x+M[4]
 function drawLabels(){for(const L of G.labels){const p=project(L.x,L.y,G.H.hAt(L.x,L.y)+(L.z||3.4));if(!L.el){L.el=document.createElement('div');L.el.style.cssText='position:fixed;z-index:4;pointer-events:none;font:900 12px Helvetica,Arial,sans-serif;letter-spacing:.06em;background:rgba(8,14,18,.7);padding:2px 6px;border-radius:6px;transform:translate(-50%,-100%);white-space:nowrap';L.el.textContent=L.t;document.body.appendChild(L.el)}
   if(!p||G.phase==='intro'){L.el.style.display='none';continue}L.el.style.display='';L.el.style.left=p[0]+'px';L.el.style.top=p[1]+'px'}}
 function clearLabels(){for(const L of G.labels||[])if(L.el)L.el.remove();G.labels=null}
+
+// putt meter range: the flat-green scale (unchanged on normal putts), raised only when a full-power putt could not climb out of a hollow / up a steep bank toward the cup
+function puttFlatMax(b,H){const d=Math.hypot(H.cup.x-b.x,H.cup.y-b.y);return Math.max(20,Math.ceil(d*3*1.6/5)*5)}
+function puttReach(b,H,ft){const d=Math.hypot(H.cup.x-b.x,H.cup.y-b.y);const hd=Math.atan2(H.cup.y-b.y,H.cup.x-b.x);const r=puttRoll(b.x,b.y,hd,puttSpeedFor(ft/3),H.surfAt,H.slopeAt,H.cup,null);if(r.kind==='sunk'||!Number.isFinite(r.x))return 0;return 1-((r.x-b.x)*Math.cos(hd)+(r.y-b.y)*Math.sin(hd))/Math.max(d,.01)}// fraction of the way still to go (<=0: reached or past the hole)
+function puttMaxFor(b,H){const m0=puttFlatMax(b,H);const d=Math.hypot(H.cup.x-b.x,H.cup.y-b.y);if(d<2)return m0;
+  try{if(puttReach(b,H,m0*.9)<.45)return m0;// a 90% stroke on the normal scale already gets past halfway: nothing to fix
+    let lo=m0,hi=m0;for(let i=0;i<6&&puttReach(b,H,hi)>=.45;i++)hi*=1.8;if(puttReach(b,H,hi)>=.45)return Math.min(600,Math.ceil(hi/5)*5);
+    for(let i=0;i<10;i++){const m=(lo+hi)/2;if(puttReach(b,H,m)<.45)hi=m;else lo=m}return Math.min(600,Math.max(m0,Math.ceil(hi*1.3/5)*5))}catch(e){return m0}}
 
 'use strict';
 /* ================= input ================= */
@@ -1593,13 +1818,13 @@ function showSetup(cid){const c=CID[cid];if(!c||!c.tees||!c.tees.length){showSel
    <div class="sec">Players · pass and play</div><div class="seg" id="np">${[1,2,3,4].map(k=>`<button data-i="${k}" class="${k===np?'sel':''}">${k===1?'Solo':k+' players'}</button>`).join('')}</div>
    <div class="sec">Time of day</div><div class="seg" id="tod">${Object.keys(TOD).map(k=>`<button data-k="${k}" class="${k===tod?'sel':''}">${TOD[k].n}</button>`).join('')}</div>
    <div class="sec">Gimmes</div><div class="seg" id="gm">${[0,2,3].map(k=>`<button data-i="${k}" class="${k===gm?'sel':''}">${k?k+' ft':'Off'}</button>`).join('')}</div>${gm?'<div class="gnote">Gimmes on, no records. Putts inside '+gm+' ft are conceded for +1 stroke.</div>':''}
-   <div class="sec">Flagstick</div><div class="seg" id="pinS">${['Pin out','Pin in'].map((n,i)=>`<button data-i="${i}" class="${i===pinS?'sel':''}">${n}</button>`).join('')}</div><div class="sec">Crowd &amp; ambience</div><div class="seg" id="crw">${['Off','Low','Medium','High'].map((n,i)=>`<button data-i="${i}" class="${i===crw?'sel':''}">${n}</button>`).join('')}</div>
+   <div class="sec">Crowd &amp; ambience</div><div class="seg" id="crw">${['Off','Low','Medium','High'].map((n,i)=>`<button data-i="${i}" class="${i===crw?'sel':''}">${n}</button>`).join('')}</div>
    <div class="pls">${Array.from({length:np},(_,k)=>`<label><span>${k===0?'You (profile owner)':'Player '+(k+1)}</span><input data-k="${k}" maxlength="16" value="${esc(names[k])}"></label>`).join('')}</div>
    <div class="scr">${cardHTML(c,tee,0,18,null,null)}</div>
    ${Object.keys(c.sig||{}).length?`<div class="sec">Signature holes</div><div style="font-size:13px;opacity:.85">${Object.entries(c.sig).map(([h,l])=>'#'+h+' '+esc(l)).join(' · ')}</div>`:''}
    <button class="btn c" id="go" style="margin-top:14px">Tee off</button><button class="btn alt c" id="gr">My records here</button>
    <div class="disc">Fan-made; layouts approximate; not affiliated with any club.<br>Scorecard: ${esc(c.src||'')}</div></div>`);
-   s.querySelector('#tees').onclick=e=>{const b=e.target.closest('button');if(b){tee=+b.dataset.i;draw()}};s.querySelector('#parts').onclick=e=>{const b=e.target.closest('button');if(b){part=+b.dataset.i;draw()}};s.querySelector('#np').onclick=e=>{const b=e.target.closest('button');if(b){np=+b.dataset.i;draw()}};s.querySelector('#tod').onclick=e=>{const b=e.target.closest('button');if(b){tod=b.dataset.k;store('ts.tod',tod);draw()}};s.querySelector('#gm').onclick=e=>{const b=e.target.closest('button');if(b){gm=+b.dataset.i;store('ts.gimme',gm);draw()}};s.querySelector('#crw').onclick=e=>{const b=e.target.closest('button');if(b){crw=+b.dataset.i;store('ts.crowd',crw);draw()}};s.querySelector('#pinS').onclick=e=>{const b=e.target.closest('button');if(b){pinS=+b.dataset.i;setPin(!!pinS);draw()}};s.querySelectorAll('.pls input').forEach(inp=>inp.oninput=()=>{names[+inp.dataset.k]=inp.value});
+   s.querySelector('#tees').onclick=e=>{const b=e.target.closest('button');if(b){tee=+b.dataset.i;draw()}};s.querySelector('#parts').onclick=e=>{const b=e.target.closest('button');if(b){part=+b.dataset.i;draw()}};s.querySelector('#np').onclick=e=>{const b=e.target.closest('button');if(b){np=+b.dataset.i;draw()}};s.querySelector('#tod').onclick=e=>{const b=e.target.closest('button');if(b){tod=b.dataset.k;store('ts.tod',tod);draw()}};s.querySelector('#gm').onclick=e=>{const b=e.target.closest('button');if(b){gm=+b.dataset.i;store('ts.gimme',gm);draw()}};s.querySelector('#crw').onclick=e=>{const b=e.target.closest('button');if(b){crw=+b.dataset.i;store('ts.crowd',crw);draw()}};s.querySelectorAll('.pls input').forEach(inp=>inp.oninput=()=>{names[+inp.dataset.k]=inp.value});
    $('ub').onclick=showSelect;$('gr').onclick=()=>showRecords(cid);$('go').onclick=()=>{store('ts.round',null);const nm=names.slice(0,np).map((x,k)=>(x||'').trim()||(k?'Player '+(k+1):'James'));for(let k=1;k<nm.length;k++){while(nm.slice(0,k).some(z=>z.toLowerCase()===nm[k].toLowerCase()))nm[k]+='+'}if(nm[0])store('ts.owner',nm[0]);startRound(cid,tee,part===1?9:0,part===2?18:9,nm.map((x,k)=>({name:x,owner:k===0})),gm,tod)}};draw()}
 function scCls(s,p){if(!s)return'';const d=s-p;return s===1?'sc-ea':d<=-2?'sc-ea':d===-1?'sc-b':d===0?'':d===1?'sc-bo':'sc-db'}
 function cardHTML(c,tee,start,n,sc,pt){const rows=[];const halves=[];for(let h=0;h<18;h+=9){const idx=[];for(let i=h;i<h+9;i++)if(i>=start&&i<start+n)idx.push(i);if(idx.length)halves.push(idx)}
@@ -1888,9 +2113,10 @@ const _finishRoundC=finishRound;finishRound=function(){const r=G.round?JSON.pars
 
 /* ---------- time of day (Morning / Midday / Sunset): lighting only, physics untouched ---------- */
 const TOD={
-  morning:{n:'Morning',az:100,el:13,sun:[-.72,.62,.2],sunCol:[1.6,1.36,1.06],skyTop:[.2,.4,.78],skyHor:[.80,.84,.88],fog:[.82,.84,.86],far:[.15,.22,.17],fogMul:.55,mist:1},
-  midday:{n:'Midday',az:185,el:50,sun:[.44,-.6,.47],sunCol:[1.0,.88,.70],skyTop:[.26,.47,.80],skyHor:[.62,.74,.90],fog:[.60,.71,.86],far:[.17,.27,.14],fogMul:.17,mist:0},
-  sunset:{n:'Sunset',az:262,el:9,sun:[.85,.45,.16],sunCol:[2.6,1.3,.5],skyTop:[.22,.32,.6],skyHor:[1.0,.55,.32],fog:[.9,.6,.42],far:[.13,.17,.10],fogMul:.8}};
+  morning:{n:'Morning',az:100,el:13,sun:[-.72,.62,.2],sunCol:[1.6,1.36,1.06],skyTop:[.14,.33,.76],skyHor:[.58,.7,.88],fog:[.82,.84,.86],far:[.15,.22,.17],fogMul:.55,mist:1},
+  midday:{n:'Midday',az:185,el:50,sun:[.44,-.6,.47],sunCol:[1.0,.88,.70],skyTop:[.11,.31,.80],skyHor:[.42,.61,.90],fog:[.60,.71,.86],far:[.17,.27,.14],fogMul:.17,mist:0},
+  sunset:{n:'Sunset',az:262,el:9,sun:[.85,.45,.16],sunCol:[2.6,1.3,.5],skyTop:[.22,.32,.6],skyHor:[1.0,.55,.32],fog:[.9,.6,.42],far:[.13,.17,.10],fogMul:.8},
+  evening:{n:'Evening',az:292,el:3,sun:[.9,.4,.05],sunCol:[2.2,.95,.42],skyTop:[.11,.17,.42],skyHor:[.95,.48,.3],fog:[.62,.44,.38],far:[.09,.11,.08],fogMul:.9}};
 function todKey(){const k=store('ts.tod');return TOD[k]?k:'midday'}
 function sunVec(t,H){// real compass placement: morning low in the east, midday high in the south, sunset low in the west; rotated into the hole frame (raw x=east, y=north)
   if(!H||typeof H.rot!=='number'||t.az===undefined){const l=Math.hypot(...t.sun);return t.sun.map(v=>v/l)}
@@ -2052,8 +2278,9 @@ function swingHintOn(){if((G.shotN||0)>0)return false;if(G.mode!=='round')return
  const _rr=resumeRound;resumeRound=function(){G.shotN=0;return _rr.apply(this,arguments)};}
 
 /* flagstick in / out (ts.pin, remembered; default in). Pin in: the cup physics lets a firm putt that hits the stick drop; pin out: the stick is removed while putting. */
-function pinIn(){const v=store('ts.pin');return v!=='out'}
-function setPin(on){store('ts.pin',on?'in':'out');if(G.H&&G.H.cup)G.H.cup.pin=!!on;updPinBtn()}
+function pinWho(){try{const r=G.round;if(r&&r.players&&r.players.length>1&&r.players[G.cur])return String(r.players[G.cur].name||G.cur)}catch(e){}return null}// pass-and-play: each player keeps his own last choice
+function pinIn(){const w=pinWho();let v=w?store('ts.pin.p.'+w):null;if(v!=='in'&&v!=='out')v=store('ts.pin');return v!=='out'}
+function setPin(on){store('ts.pin',on?'in':'out');{const w=pinWho();if(w)store('ts.pin.p.'+w,on?'in':'out')}if(G.H&&G.H.cup)G.H.cup.pin=!!on;updPinBtn()}
 function updPinBtn(){const b=$('pinT');if(b){b.textContent=pinIn()?'PIN IN':'PIN OUT';b.classList.toggle('out',!pinIn())}}
 (function(){const host=$('putt');if(!host)return;const b=document.createElement('button');b.id='pinT';b.type='button';b.style.cssText='display:none;pointer-events:auto;margin-top:6px;font:800 11px/1 inherit;letter-spacing:.06em;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.35);color:#fff;cursor:pointer';
   const stop=e=>{e.stopPropagation()};b.addEventListener('pointerdown',stop);b.addEventListener('mousedown',stop);b.addEventListener('touchstart',stop,{passive:true});b.addEventListener('keydown',e=>{if(e.code==='Space')e.preventDefault()});
@@ -2061,8 +2288,13 @@ function updPinBtn(){const b=$('pinT');if(b){b.textContent=pinIn()?'PIN IN':'PIN
 {const _sh=setHole;setHole=function(H){const r=_sh.apply(this,arguments);try{if(H&&H.cup)H.cup.pin=pinIn();updPinBtn()}catch(e){}return r}}
 function pinHidden(){return !pinIn()&&G.mode!=='menu'&&(G.phase==='putt'||((G.phase==='flight'||G.phase==='replay')&&G.anim&&G.anim.put))}
 /* the Pin In / Pin Out toggle shows only while a putt is being set up (putting view), hidden for every other shot and screen */
-function pinBtnWanted(){return G.mode&&G.mode!=='menu'&&G.phase==='putt'&&!G.replay}
-(function pinBtnLoop(){try{const b=$('pinT');if(b){const w=pinBtnWanted();const d=w?'inline-block':'none';if(b.style.display!==d)b.style.display=d}}catch(e){}requestAnimationFrame(pinBtnLoop)})();
+function pinBtnWanted(){// only while the ball sits on the green and the player is setting up (never on the tee, fairway, rough, sand or fringe, never in pre-round setup)
+  return !!(G.mode&&G.mode!=='menu'&&!G.replay&&G.ball&&G.ball.surf===S_GREEN&&(G.phase==='putt'||G.phase==='address'))}
+function pinBtnSync(){try{const b=$('pinT');if(b){const w=pinBtnWanted();const d=w?'inline-block':'none';if(b.style.display!==d)b.style.display=d;if(w){{const p=pinWho();if(p){const v=store('ts.pin.p.'+p);if(v!=='in'&&v!=='out')store('ts.pin.p.'+p,pinIn()?'in':'out')}}updPinBtn();if(G.H&&G.H.cup)G.H.cup.pin=pinIn()}}}catch(e){}}
+(function pinBtnLoop(){pinBtnSync();requestAnimationFrame(pinBtnLoop)})();
+// show it the moment a putt is set up (not a frame later), for every player in pass-and-play
+{const _sa=setAddress;setAddress=function(){const r=_sa.apply(this,arguments);pinBtnSync();return r}}
+if(typeof mpLoad==='function'){const _ml=mpLoad;mpLoad=function(){const r=_ml.apply(this,arguments);pinBtnSync();return r}}
 
 </script>
 </body>
