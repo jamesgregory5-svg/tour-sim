@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.17';
+const VERSION='v1.18';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -1039,20 +1039,21 @@ void main(){vec3 d=normalize(uF+uR*vU.x*uT.x+uU*vU.y*uT.y);vec3 c=skyCol(d);floa
   o=vec4(pow(tm(c),vec3(1./2.2)),1.);}`);
   R.pTree=prog(`
 layout(location=0) in vec2 aQ;layout(location=3) in vec4 iP;layout(location=4) in vec4 iW;
-uniform mat4 uVP;uniform float uTime;uniform vec3 uEye;uniform vec3 uSun;uniform float uR3;out vec3 vP;out vec2 vUV;out float vTint;out float vY;out float vFace;out float vFl;out float vNear;out float vF3;
-void main(){float spc=floor(iW.y/8.);float is3=(uR3>0.&&spc!=4.&&spc!=5.&&spc!=6.)?1.:0.;vF3=mix(1.,step(uR3,length(iP.xy-uEye.xy)),is3);if(vF3<=0.){gl_Position=vec4(2.,2.,2.,1.);return;}vec2 v=uEye.xy-iP.xy;float l=length(v);vNear=smoothstep(5.,13.,l);v=l>.001?v/l:vec2(0.,1.);vec2 r=vec2(-v.y,v.x);
+uniform mat4 uVP;uniform float uTime;uniform vec3 uEye;uniform vec3 uSun;uniform float uR3;out vec3 vP;out vec2 vUV;out float vTint;out float vY;out float vFace;out float vFl;out float vNear;out float vF3;out float vIs3;
+void main(){float spc=floor(iW.y/8.);float is3=(uR3>0.&&spc!=4.&&spc!=5.&&spc!=6.)?1.:0.;vIs3=is3;vF3=mix(1.,step(uR3,length(iP.xy-uEye.xy)),is3);if(vF3<=0.){gl_Position=vec4(2.,2.,2.,1.);return;}vec2 v=uEye.xy-iP.xy;float l=length(v);vNear=smoothstep(5.,13.,l);v=l>.001?v/l:vec2(0.,1.);vec2 r=vec2(-v.y,v.x);
  float qh=iP.w,qw=iW.x;float sw=sin(uTime*1.1+iP.x*.21+iP.y*.17)*.010*qh*aQ.y*aQ.y;
  vec3 p=vec3(iP.xy+r*aQ.x*qw+vec2(.7,.4)*sw+r*(iW.z-.5)*.11*qh*aQ.y*aQ.y,iP.z+aQ.y*qh);
  float cell=iW.y;float col=mod(cell,16.),row=floor(cell/16.);float ux=iW.w>0.?aQ.x+.5:.5-aQ.x;
  vUV=vec2((col+clamp(ux,.012,.988))/16.,(row+clamp(1.-aQ.y,.016,.996))/5.);vP=p;vTint=iW.z;vY=aQ.y;vFl=(spc==5.||spc==6.)?1.:0.;vFace=vFl>.5?dot(v,normalize(vec2(.38,-.52))):dot(v,normalize(uSun.xy+vec2(1e-4)));/* locked Augusta flowers (dogwood/azalea) keep the exact v1.14 lighting; v1.15: lit side follows the real sun, not a fixed axis (no view-dependent colour swings) */
  gl_Position=uVP*vec4(p,1.);}`,`
 ${GLSL_COMMON}
-in vec3 vP;in vec2 vUV;in float vTint;in float vY;in float vFace;in float vFl;in float vNear;in float vF3;out vec4 o;uniform sampler2D uAtl;
+in vec3 vP;in vec2 vUV;in float vTint;in float vY;in float vFace;in float vFl;in float vNear;in float vF3;in float vIs3;out vec4 o;uniform sampler2D uAtl;uniform float uBbK;
 void main(){vec4 t=texture(uAtl,vUV);if(t.a<.5||vNear<fract(sin(dot(gl_FragCoord.xy,vec2(12.98,78.23)))*43758.5))discard;vec3 c=pow(t.rgb/max(t.a,.001),vec3(2.2));
  c*=mix(vec3(.86,.92,.82),vec3(1.12,1.06,.92),vTint);
  float lit=vFl>.5?.62+.38*clamp(vFace*.5+.5,0.,1.):.72+.2*clamp(vFace*.5+.5,0.,1.);vec3 amb=mix(uSkyHor*.35,uSkyTop*.45,.6);
  vec3 col=c*(amb*1.1+uSunCol*lit*.95)*(.78+.32*vY);
  vec3 V=normalize(vP-uEye);float back=pow(max(dot(V,uSun),0.),3.);col+=c*uSunCol*back*.35;
+ col*=mix(1.,uBbK,vIs3);/* v1.18: billboards of species that swap to 3D trees match the 3D trees' brightness at the swap distance (no colour pop when the camera closes in) */
  col=fogit(col,vP);o=vec4(pow(tm(col),vec3(1./2.2)),t.a);}`);
   R.pMesh=prog(`
 layout(location=0) in vec3 aP;layout(location=1) in vec3 aN;uniform mat4 uVP;uniform mat4 uM;uniform float uFlag;uniform float uTime;out vec3 vP;out vec3 vN;out vec3 vO;
@@ -1091,6 +1092,8 @@ void main(){float a=abs(vA.y);float glow=exp(-a*a*6.)*.55;float core=1.-smoothst
     for(let i=0;i<a;i++)for(let j=0;j<b;j++){const k=i*(b+1)+j;I.push(k,k+b+1,k+1,k+1,k+b+1,k+b+2)}return meshFrom(P,N,I)})();
   R.ballM=(()=>{const P=[],N=[],I=[],a=28,b=40;for(let i=0;i<=a;i++)for(let j=0;j<=b;j++){const t=i/a*Math.PI,p=j/b*TAU;const x=Math.sin(t)*Math.cos(p),y=Math.sin(t)*Math.sin(p),z=Math.cos(t);P.push(x,y,z);N.push(x,y,z)}
     for(let i=0;i<a;i++)for(let j=0;j<b;j++){const k=i*(b+1)+j;I.push(k,k+b+1,k+1,k+1,k+b+1,k+b+2)}return meshFrom(P,N,I)})();
+  R.dropM=(()=>{const P=[],N=[],I=[],a=5,b=8;for(let i=0;i<=a;i++)for(let j=0;j<=b;j++){const t=i/a*Math.PI,p=j/b*TAU;const x=Math.sin(t)*Math.cos(p),y=Math.sin(t)*Math.sin(p),z=Math.cos(t);P.push(x,y,z);N.push(x,y,z)}for(let i=0;i<a;i++)for(let j=0;j<b;j++){const k=i*(b+1)+j;I.push(k,k+b+1,k+1,k+1,k+b+1,k+b+2)}return meshFrom(P,N,I)})();
+  R.ringM=(()=>{const P=[],N=[],I=[],s=40;for(let j=0;j<=s;j++){const p=j/s*TAU,x=Math.cos(p),y=Math.sin(p);P.push(x*.9,y*.9,0,x,y,0);N.push(0,0,1,0,0,1)}for(let j=0;j<s;j++){const k=j*2;I.push(k,k+1,k+2,k+1,k+3,k+2)}return meshFrom(P,N,I)})();// v1.18: splash droplets + ripple rings
   R.cyl=(()=>{const P=[],N=[],I=[],s=10;for(let j=0;j<=s;j++){const p=j/s*TAU,x=Math.cos(p),y=Math.sin(p);P.push(x,y,0,x,y,1);N.push(x,y,0,x,y,0)}for(let j=0;j<s;j++){const k=j*2;I.push(k,k+2,k+1,k+1,k+2,k+3)}return meshFrom(P,N,I)})();
   R.flagM=(()=>{const P=[],N=[],I=[],nx=10,ny=6;for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){P.push(i/nx,0,j/ny);N.push(0,-1,0)}for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*(nx+1)+i;I.push(k,k+1,k+nx+1,k+1,k+nx+2,k+nx+1)}return meshFrom(P,N,I)})();
   R.disc=(()=>{const P=[0,0,0],N=[0,0,1],I=[],s=16;for(let j=0;j<=s;j++){const p=j/s*TAU;P.push(Math.cos(p),Math.sin(p),0);N.push(0,0,1)}for(let j=1;j<=s;j++)I.push(0,j,j+1);return meshFrom(P,N,I)})();
@@ -1190,7 +1193,7 @@ function glDraw(R,cam,S){
     gl.uniform1f(u.uFoam,R.hole.H.sea.length?1:0);if(u.uDune)gl.uniform1f(u.uDune,['dunes','prairie'].includes(R.hole.H.course.style)||['pacificdunes','sandhills','friars','pinevalley'].includes(R.hole.H.course.id)?1:0);if(u.uSeaZ){const H=R.hole.H;if(H.seaZ===undefined)seaLevel(H);if(H.seaZ===undefined){const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9}gl.uniform1f(u.uSeaZ,H.seaZ)}{const H=R.hole.H;outSea(H);if(u.uOutSea)gl.uniform1f(u.uOutSea,H.outZ>-900?1:0);if(u.uWv)gl.uniform1f(u.uWv,({lookaway:1,augusta:1,pebble:2})[H.course.id]||0);if(u.uOutZ)gl.uniform1f(u.uOutZ,H.outZ)}gl.uniform1f(u.uOuter,0);gl.bindVertexArray(R.hole.ter.v);gl.drawElements(gl.TRIANGLES,R.hole.ter.n,gl.UNSIGNED_INT,0);
     gl.uniform1f(u.uOuter,1);gl.uniform1f(u.uAimOn,0);gl.bindVertexArray(R.hole.outer.v);gl.drawElements(gl.TRIANGLES,R.hole.outer.n,gl.UNSIGNED_INT,0)}
   // trees (impostor billboards, alpha-tested, alpha-to-coverage)
-  {const p=R.pTree;common(p);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.uniform1i(p.u.uAtl,3);if(p.u.uR3)gl.uniform1f(p.u.uR3,R.t3?T3R:0);gl.disable(gl.CULL_FACE);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+  {const p=R.pTree;common(p);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.uniform1i(p.u.uAtl,3);if(p.u.uR3)gl.uniform1f(p.u.uR3,R.t3?T3R:0);if(p.u.uBbK)gl.uniform1f(p.u.uBbK,R.t3?.39:1);gl.disable(gl.CULL_FACE);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
     const v=R.treeV;if(v.inst){gl.bindVertexArray(v.v);gl.drawArraysInstanced(gl.TRIANGLES,0,6,v.inst)}gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);gl.enable(gl.CULL_FACE)}
   if(R.t3&&typeof t3Draw==='function')t3Draw(R,common,cam);
   // meshes: flags, pole, ball, tee
@@ -1199,7 +1202,7 @@ function glDraw(R,cam,S){
     const TRS=(x,y,z,sx,sy,sz)=>new Float32Array([sx,0,0,0,0,sy,0,0,0,0,sz,0,x,y,z,1]);
     for(const f of S.flags||[]){const z=H.hAt(f.x,f.y);const dE=Math.hypot(cam.eye[0]-f.x,cam.eye[1]-f.y);const k=Math.max(1,dE/90),pr=Math.max(.014,dE*.0011);
       draw(R.cyl,TRS(f.x,f.y,z-.1,pr,pr,2.6+(k-1)*.6),[.97,.97,.94],0,.4);draw(R.flagM,TRS(f.x+pr,f.y,z+2.6+(k-1)*.6-.45*k,.7*k,1,.45*k),f.col||[.95,.85,.1],1,.45)}
-    if(R.bldFor!==H)bldBuild(R,H);{const I4=TRS(0,0,0,1,1,1);for(const g of R.bld)draw(g.m,I4,g.c.map(v=>v*.8),0,.45)}// neutral fill light: shaded walls read grey/beige, not navy
+    if(R.bldFor!==H)bldBuild(R,H);{const I4=TRS(0,0,0,1,1,1);for(const g of R.bld)draw(g.m,I4,g.c.map(v=>v*.8),0,.45)}if(SPL.on)splashDraw(R,draw);// neutral fill light: shaded walls read grey/beige, not navy
     if(S.tee)draw(R.cyl,TRS(S.tee.x,S.tee.y,S.tee.z-.05,.006,.006,.06),[1,1,1]);
     for(const t of S.teeMarks||[]){draw(R.sphere,TRS(t.x,t.y,t.z+.08,.13,.13,.11),t.col,0,.15)}
     gl.uniform1f(u.uBallD,1);for(const b of S.extraBalls||[])draw(R.ballM,TRS(b.x,b.y,b.z+.0233,.0233,.0233,.0233),[.95,.95,.95],0,.1);
@@ -1589,6 +1592,10 @@ let AC=null;function sfx(k,q){try{if(!AC)AC=new(window.AudioContext||window.webk
   if(k==='hit'){const n=AC.createBufferSource(),buf=AC.createBuffer(1,AC.sampleRate*.08,AC.sampleRate),d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*.12));n.buffer=buf;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=2200+(q||1.4)*900;n.connect(f);f.connect(AC.destination);n.start(t);o.frequency.value=900;g.gain.setValueAtTime(.05,t);g.gain.exponentialRampToValueAtTime(.0001,t+.07)}
   else if(k==='putt'){o.frequency.value=520;o.type='triangle';g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.0001,t+.1)}
   else if(k==='cup'){o.frequency.value=330;o.type='sine';g.gain.setValueAtTime(.18,t);g.gain.exponentialRampToValueAtTime(.0001,t+.35);o.frequency.exponentialRampToValueAtTime(160,t+.3)}
+  else if(k==='splash'){if(AC.state==='suspended')AC.resume();// v1.18: water splash, synthesized offline: noise burst through a falling low-pass + a short 'bloop'
+    const L=Math.floor(AC.sampleRate*.75),buf=AC.createBuffer(1,L,AC.sampleRate),d=buf.getChannelData(0);for(let i=0;i<L;i++){const e=i/L;d[i]=(Math.random()*2-1)*Math.min(1,i/(AC.sampleRate*.006))*Math.exp(-e*5.5)}
+    const n=AC.createBufferSource();n.buffer=buf;const f=AC.createBiquadFilter();f.type='lowpass';f.Q.value=.8;f.frequency.setValueAtTime(3800,t);f.frequency.exponentialRampToValueAtTime(260,t+.6);const ng=AC.createGain();ng.gain.value=.32*(q||1);n.connect(f);f.connect(ng);ng.connect(AC.destination);n.start(t);n.stop(t+.75);
+    o.type='sine';o.frequency.setValueAtTime(620,t+.04);o.frequency.exponentialRampToValueAtTime(170,t+.2);g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(.12*(q||1),t+.06);g.gain.exponentialRampToValueAtTime(.0001,t+.24);SPL.snd++}
   else{o.frequency.value=700;g.gain.setValueAtTime(.04,t);g.gain.exponentialRampToValueAtTime(.0001,t+.05)}
   o.start(t);o.stop(t+.4)}catch(e){}}
 
@@ -1649,11 +1656,12 @@ function frame(now){requestAnimationFrame(frame);const _t0=performance.now();
   // keyboard swing progress
   swingTick();
   // animation
-  if(G.phase==='flight'){const a=G.anim;const tfAdj=a.put?1:1;a.t+=dt*tfAdj;
+  if(G.phase==='flight'){const a=G.anim;const tfAdj=a.put?1:1;a.t+=dt*tfAdj;splashChk();// v1.18: before finishShot can switch to 'pen'
     if(!a.landed&&a.t*60>=a.flightN-1&&!a.put){a.landed=true;showThird(1)}
     if(a.t*60>=a.n-1){a.t=(a.n-1)/60;G.phase='rest';G.restT=0;finishShot();if(!a.put)showThird(2)}}
   else if(G.phase==='rest'){G.restT+=dt;if(G.restT>(G.anim&&G.anim.put?.8:1.7)){if(G.mode==='round'||G.restHandler===undefined){G.phase='x';(G.afterRest||nextAddress)()}}}
   if(G.phase==='replay')replayTick(dt);
+  splashTick(dt);
   updCam(dt);
   {const hv=(G.phase==='address'||G.phase==='swing')&&swingHintOn()?1:0;const he=$('hint');if(he.style.opacity!=hv)he.style.opacity=hv;const fl=G.phase==='flight'||G.phase==='rest'||G.phase==='holed'||G.phase==='replay';const hu=$('hud');if(hu.classList.contains('fly')!==fl)hu.classList.toggle('fly',fl)}
   // compose scene
@@ -2373,6 +2381,25 @@ function pinBtnSync(){try{const b=$('pinT');if(b){const w=pinBtnWanted();const d
 // show it the moment a putt is set up (not a frame later), for every player in pass-and-play
 {const _sa=setAddress;setAddress=function(){const r=_sa.apply(this,arguments);pinBtnSync();return r}}
 if(typeof mpLoad==='function'){const _ml=mpLoad;mpLoad=function(){const r=_ml.apply(this,arguments);pinBtnSync();return r}}
+
+// v1.18: water splash (all courses, live shots and replays): droplets + a rising column + expanding ripple rings, and a synthesized splash sound
+const SPL={on:0,n:0,P:new Float32Array(48*8),R:new Float32Array(3*2),x:0,y:0,z:0,t:9,seen:new WeakSet(),M:new Float32Array(16),C:new Float32Array(3),snd:0,count:0};
+function splashStart(x,y,z,big){const P=SPL.P;SPL.x=x;SPL.y=y;SPL.z=z;SPL.t=0;SPL.on=1;SPL.n=48;SPL.count++;
+  for(let i=0;i<48;i++){const o=i*8,col=i<10,a=Math.random()*TAU,s=col?Math.random()*.5:1+Math.random()*2.6;P[o]=x+Math.cos(a)*(col?.15:.3);P[o+1]=y+Math.sin(a)*(col?.15:.3);P[o+2]=z;
+    P[o+3]=Math.cos(a)*s;P[o+4]=Math.sin(a)*s;P[o+5]=(col?5+Math.random()*4.5:2.5+Math.random()*4)*(big?1:.75);P[o+6]=col?.09+Math.random()*.07:.035+Math.random()*.05;P[o+7]=1}
+  try{sfx('splash',big?1:.8)}catch(e){}}
+function splashChk(){const a=G.anim;
+  if(a&&!a.put&&a.res&&a.res.kind==='water'&&a.n>1&&(G.phase==='flight'||G.phase==='replay'||G.phase==='rest')&&!SPL.seen.has(a)&&a.t*60>=a.n-1.001){SPL.seen.add(a);const k=(a.n-1)*3;splashStart(a.P[k],a.P[k+1],a.P[k+2],!a.chip)}}
+function splashTick(dt){splashChk();
+  if(!SPL.on)return;SPL.t+=dt;const P=SPL.P;
+  for(let i=0;i<SPL.n;i++){const o=i*8;if(P[o+7]<=0)continue;P[o]+=P[o+3]*dt;P[o+1]+=P[o+4]*dt;P[o+2]+=P[o+5]*dt;P[o+5]-=10.7*dt;if(P[o+2]<SPL.z-.05&&P[o+5]<0)P[o+7]=0}
+  if(SPL.t>1.8)SPL.on=0}
+function splashDraw(R,draw){const M=SPL.M,C=SPL.C,P=SPL.P;M.fill(0);M[15]=1;
+  for(let i=0;i<SPL.n;i++){const o=i*8;if(P[o+7]<=0)continue;const s=P[o+6]*(1-Math.min(.6,SPL.t*.4));M[0]=M[5]=s;M[10]=s*1.25;M[12]=P[o];M[13]=P[o+1];M[14]=P[o+2];C[0]=.86;C[1]=.92;C[2]=.95;draw(R.dropM,M,C,0,.35)}
+  for(let r=0;r<3;r++){const f=(SPL.t-r*.18)/1.4;if(f<=0||f>=1)continue;const rad=.25+3.2*Math.sqrt(f);M[0]=M[5]=rad;M[10]=1;M[12]=SPL.x;M[13]=SPL.y;M[14]=SPL.z+.03;const k=1-f;C[0]=.2+.62*k;C[1]=.3+.58*k;C[2]=.33+.58*k;draw(R.ringM,M,C,0,.3*k)}}
+// v1.18: when the ball splashes, the relief panel fades in after ~0.9 s so the splash is seen (phase/keys/timer unchanged, so the flow is never blocked)
+{const st=document.createElement('style');st.textContent='@keyframes penIn{from{opacity:0}to{opacity:1}}';document.head.appendChild(st);
+ const _ps=penShow;penShow=function(o){_ps(o);const d=$('pen');if(d)d.style.animation=SPL.on&&SPL.t<.5?'penIn .3s ease .9s both':''}}
 
 </script>
 </body>
