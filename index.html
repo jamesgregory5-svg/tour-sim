@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="ldr" style="position:fixed;inset:0;z-index:9999;background:#0b1014;display:flex;align-items:center;justify-content:center;color:#e8eef2;font:700 28px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.18em;transition:opacity .6s ease">LOADING…</div><div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.27';
+const VERSION='v1.28';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -572,7 +572,7 @@ const STYLE={
 STYLE.dunes=STYLE.sandhills;STYLE.prairie=Object.assign({},STYLE.links,{trees:.35,tree:0});
 const DENS={augusta:1.3,pinevalley:1.05,lookaway:1.05,cypress:.7,shinnecock:.03,oakmont:.05,merion:.8,ngla:.05,sandhills:.03,pebble:.35,fishers:.04,chicago:.3,seminole:.45,wingedfoot:1,friars:.05,crystal:.9,lacc:.6,tcc:1,riviera:.8,muirfieldv:1,oaklandhills:.8,oakhill:1.1,peachtree:1,pacificdunes:.02,shadowcreek:1.2,prairie:.25};
 // per-course turf colours: Riviera's kikuyu fairways read lighter against darker rough so the split fairway and small greens show
-const STYLE_OVR={lookaway:{deep:'#7f7c4a',native:20,sand:'#efe8d6'},oakmont:{rough:'#46692a',rough2:'#4e722e',fw:'#5a9036',fw2:'#669e3f',deep:'#8d8a56',native:24,sand:'#e8dcc0'},ngla:{deep:'#a59a5e',native:16,fw:'#66903c',fw2:'#729c45'},riviera:{rough:'#44692a',rough2:'#4b712f',fw:'#5d963a',fw2:'#6ba445'},/* v1.27: lighter, less flat parkland roughs (more rough/rough2 contrast), softer deep */peachtree:{rough:'#3f6326',rough2:'#4d7330',deep:'#4d5c2c',fw:'#55873a',fw2:'#609440'},augusta:{rough:'#3e6527',rough2:'#47702d'},chicago:{rough:'#40652a',rough2:'#4c7231',deep:'#6f7144'},muirfieldv:{rough:'#3f6428',rough2:'#4a6f2e',fw:'#559038',fw2:'#62a042'}};
+const STYLE_OVR={lookaway:{deep:'#7f7c4a',native:20,sand:'#efe8d6'},oakmont:{rough:'#46692a',rough2:'#4e722e',fw:'#5a9036',fw2:'#669e3f',deep:'#8d8a56',native:24,sand:'#e8dcc0'},ngla:{deep:'#a59a5e',native:16,fw:'#66903c',fw2:'#729c45'},riviera:{rough:'#44692a',rough2:'#4b712f',fw:'#5d963a',fw2:'#6ba445'},/* v1.28: lighter, less flat parkland roughs (more rough/rough2 contrast), softer deep */peachtree:{rough:'#3f6326',rough2:'#4d7330',deep:'#4d5c2c',fw:'#55873a',fw2:'#609440'},augusta:{rough:'#3e6527',rough2:'#47702d'},chicago:{rough:'#40652a',rough2:'#4c7231',deep:'#6f7144'},muirfieldv:{rough:'#3f6428',rough2:'#4a6f2e',fw:'#559038',fw2:'#62a042'}};
 const TREEMIX={augusta:1,pinevalley:1,sandhills:1,lookaway:0,oakmont:0,crystal:2,riviera:0,shadowcreek:1,peachtree:1,seminole:3};
 const SCOL=['#000','rough','fw','fw','fringe','green','sand','water','deep','waste'];
 function fbm2(x,y,seed){let v=0,a=1,f=1/90;for(let o=0;o<4;o++){v+=a*vnoise(x*f+seed*7.1,y*f-seed*3.3);a*=.5;f*=2.03}return v}
@@ -582,6 +582,8 @@ function vnoise(x,y){const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,u=fx*fx
 function buildHole0(course,geo,hi,teeIdx,opts){
   opts=opts||{};const par=(course.tees[teeIdx].par||course.par)[hi],yards=course.tees[teeIdx].y[hi];const st=Object.assign({},STYLE[course.style]||STYLE.parkland,TREEMIX[course.id]!==undefined?{tree:TREEMIX[course.id]}:{},DENS[course.id]!==undefined?{trees:DENS[course.id]}:{},STYLE_OVR[course.id]||{});
   if(course.id==='chicago')Object.assign(st,{rough:'#41652a',rough2:'#486d2e',deep:'#3a5a25',waste:'#b8a57c'});// Wheaton IL parkland-prairie: green rough, fescue only where mapped
+  {/* v1.28: per-course grass brightness/saturation matched to USGS NAIP aerials (median vegetation colour) */const AT={tcc:[1.3,.8],seminole:[1.16,.88],oaklandhills:[1.15,.92],prairie:[.88,1],fishers:[.98,.9],crystal:[1,.88],oakhill:[1.04,.9],wingedfoot:[1.04,.92]}[course.id];
+    if(AT)for(const k of['rough','rough2','fw','fw2','deep']){const h=st[k];if(typeof h!=='string'||h[0]!=='#'||h.length!==7)continue;let r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);const m=(r+g+b)/3;const f=x=>Math.max(0,Math.min(255,Math.round((m+(x-m)*AT[1])*AT[0])));st[k]='#'+[f(r),f(g),f(b)].map(v=>v.toString(16).padStart(2,'0')).join('')}}
   const R=RNG(course.id+':'+hi+':'+(opts.seed||'')),seedN=xmur(course.id+hi)%1000;
   const hd=geo.h[hi];let L=dec(hd.l);
   // place tee by scorecard yardage
@@ -842,7 +844,7 @@ function paintHole(H,PX){
   g.fillStyle=st.fw;noHoles(g,()=>{for(const P of(F.fw||[])){path(P);g.fill()}})// mowing stripes are shaded in the terrain shader (smooth, hole-aligned, no paint-map blocks)
   // first cut fringe around fairways
   g.lineJoin='round';g.strokeStyle='rgba(62,100,40,.75)';g.lineWidth=2.4;for(const P of(F.fw||[])){path(P);g.stroke()}
-  if((F.cp||[]).length){g.save();g.lineCap='round';g.lineJoin='round';const chk=P=>{let Q=P;for(let it=0;it<4;it++){if(Q.length<3)break;const N=[Q[0]];for(let k=0;k<Q.length-1;k++){const a=Q[k],b=Q[k+1];N.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75])}N.push(Q[Q.length-1]);Q=N}return Q};const CP=F.cp.map(chk);const op=P=>{g.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?g.lineTo(x,y):g.moveTo(x,y)})};/* v1.27: dead ends taper to nothing over ~7 yd (no abrupt stubby ends); joined ends stay full width */
+  if((F.cp||[]).length){g.save();g.lineCap='round';g.lineJoin='round';const chk=P=>{let Q=P;for(let it=0;it<4;it++){if(Q.length<3)break;const N=[Q[0]];for(let k=0;k<Q.length-1;k++){const a=Q[k],b=Q[k+1];N.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75])}N.push(Q[Q.length-1]);Q=N}return Q};const CP=F.cp.map(chk);const op=P=>{g.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?g.lineTo(x,y):g.moveTo(x,y)})};/* v1.28: dead ends taper to nothing over ~7 yd (no abrupt stubby ends); joined ends stay full width */
   const fr=CP.map((P,i)=>[0,P.length-1].map(e=>{const q=P[e];for(let j=0;j<CP.length;j++){if(j===i)continue;for(const r of CP[j])if(Math.hypot(r[0]-q[0],r[1]-q[1])<4)return 0}return 1}));
   const stT=(P,i)=>{const n=P.length,f=fr[CP.indexOf(P)];let ac=[0];for(let k=1;k<n;k++)ac.push(ac[k-1]+Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]));const Lt=ac[n-1],w0=g.lineWidth;
     if(!(f[0]||f[1])){op(P);g.stroke();return}
@@ -941,7 +943,7 @@ function pebShore(H,g){const X0=H.X0,Y1=H.Y1,sz=seaLevel(H),RR=RNG('pk'+H.hi);g.
   st(5.5,'#4f4a42',false);st(3,'#6e675c',false);
   for(const q of segs){if(q[4])continue;const L=Math.hypot(q[2]-q[0],q[3]-q[1]);for(let t=0;t<L;t+=1.7){const f=t/L,x=q[0]+(q[2]-q[0])*f+RR.range(-2,2),y=q[1]+(q[3]-q[1])*f+RR.range(-2,2);
     const v=RR.range(.7,1.15),rx=RR.range(.7,1.8),ry=rx*RR.range(.55,.85),ro=RR()*3,X=x-X0,Y=Y1-y;g.fillStyle=`rgb(${120*v|0},${112*v|0},${100*v|0})`;g.beginPath();g.ellipse(X,Y,rx,ry,ro,0,TAU);g.fill()}}
-  // v1.27: low ground right at sea level outside the mapped sea (tidal rocks, ledges) reads as wet rock, not green grass patches in the water
+  // v1.28: low ground right at sea level outside the mapped sea (tidal rocks, ledges) reads as wet rock, not green grass patches in the water
   for(let y=H.Y0+1;y<Y1-1;y+=1)for(let x=X0+1;x<H.X1-1;x+=1){const z=H.hAt(x,y);if(z>sz+1.1)continue;const s=H.surfAt(x,y);if(s!==S_ROUGH&&s!==S_DEEP&&s!==S_OB)continue;if(H.surfAt(x+6,y)!==S_WATER&&H.surfAt(x-6,y)!==S_WATER&&H.surfAt(x,y+6)!==S_WATER&&H.surfAt(x,y-6)!==S_WATER)continue;const v=.75+.3*hash2(x*5+y,y*7-x);g.fillStyle=`rgba(${96*v|0},${92*v|0},${84*v|0},.92)`;g.fillRect(x-X0-.5,Y1-y-.5,1.05,1.05)}
   // steep coastal faces -> rock (sandstone/granite greys with streaks); only on rough-type ground within reach of the sea level
   for(let y=H.Y0+1;y<Y1-1;y+=1)for(let x=X0+1;x<H.X1-1;x+=1){const z=H.hAt(x,y);if(z-sz>24||z<sz+.2)continue;const s=H.surfAt(x,y);if(s!==S_ROUGH&&s!==S_DEEP&&s!==S_OB)continue;
@@ -981,7 +983,7 @@ ${GLSL_COMMON}
 in vec3 vP;in vec3 vN;out vec4 o;
 uniform sampler2D uCol;uniform sampler2D uMask;uniform sampler2D uNoise;uniform vec4 uReg;uniform vec3 uFar;
 uniform vec2 uCup;uniform vec4 uBall;uniform vec4 uRing;uniform vec4 uAim;uniform float uAimOn;uniform float uPutt;
-uniform vec4 uG0;uniform vec4 uGb[4];uniform float uOuter;uniform float uFoam;uniform float uDune;uniform float uCliff;uniform float uOutSea;uniform float uOutZ;uniform float uWv;
+uniform vec4 uG0;uniform vec4 uGb[4];uniform float uOuter;uniform float uFoam;uniform float uDune;uniform float uCliff;uniform float uEdgeSea;uniform float uOutSea;uniform float uOutZ;uniform float uWv;
 vec2 gGrad(vec2 p){vec2 g=uG0.zw;for(int i=0;i<4;i++){vec2 d=p-uGb[i].xy;float e=uGb[i].w*exp(-dot(d,d)/(2.*uGb[i].z*uGb[i].z))/(uGb[i].z*uGb[i].z);g-=d*e;}return g;}
 float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 void main(){
@@ -1021,14 +1023,14 @@ void main(){
   vec3 N=normalize(vN);vec3 Ne=normalize(vec3(N.xy*4.2,N.z));float df=max(dot(Ne,uSun),0.);
   vec3 amb=mix(uSkyHor*.35,uSkyTop*.5,N.z*.5+.5);float gold=1.-smoothstep(.2,.38,uSun.z);
   if(gold>0.){vec3 Ns=normalize(vec3(N.xy*1.8,N.z));float dw=clamp(dot(Ns,normalize(vec3(uSun.xy,.5)))*.6+.32,0.,1.);df=mix(df,dw*.95,gold);amb=mix(amb,uSkyTop*vec3(.8,1.,1.45)*.85,gold*.75);}
-  float fes=smoothstep(.2,.45,m.a)*(1.-rkG);float fesO=uDune*bxE*(.5+.4*smoothstep(.35,.65,nz.g))*(1.-rkG);/* v1.27: dune courses: native fescue/sand continues past the hole box (Pacific Dunes sand rectangle) */fes=fes*(1.-bxE)+fesO;
+  float fes=smoothstep(.2,.45,m.a)*(1.-rkG);float fesO=uDune*bxE*(.5+.4*smoothstep(.35,.65,nz.g))*(1.-rkG);/* v1.28: dune courses: native fescue/sand continues past the hole box (Pacific Dunes sand rectangle) */fes=fes*(1.-bxE)+fesO;
   if(fes>0.001){// native grass: wind-combed strands in clumped tufts; on dune courses rippled sand shows between the tufts
     vec4 mac=texture(uNoise,vP.xy*.0123+.31);vec2 wp=vP.xy+(nz.rg-.5)*9.+(nz2.ba-.5)*1.6;float ang=.64+(mac.r-.5)*1.9;vec2 cs=vec2(cos(ang),sin(ang));vec2 rq=vec2(dot(wp,cs),dot(wp,vec2(-cs.y,cs.x)));float sway=sin(uTime*.8+vP.x*.25+vP.y*.18)*.12;
     float tuft=smoothstep(.40,.64,texture(uNoise,wp*.42).r*.65+nz2.g*.35);vec2 rq2=vec2(dot(wp,vec2(cs.y,cs.x)),dot(wp,vec2(-cs.x,cs.y)));float strand=texture(uNoise,(rq+vec2(sway,0.))*vec2(.7,5.5)).b*.45+texture(uNoise,rq*vec2(1.9,13.)+.4).g*.25+texture(uNoise,rq2*vec2(1.1,7.3)+.77).r*.3;
     float wb=1.-smoothstep(.2,.55,fp*6.);strand=mix(.55,strand,.35+.65*wb);
     vec3 gc=mix(vec3(.42,.41,.25),vec3(.80,.72,.49),smoothstep(.3,.8,strand))*mix(.82,1.08,nz.b);gc=mix(gc,gc*vec3(.86,1.02,.82),smoothstep(.35,.7,mac.g))*mix(.86,1.1,mac.b);
     float rip=.5+.5*sin(rq.y*2.4+nz2.r*5.);vec3 sc=vec3(.80,.74,.58)*(.93+.12*rip*(1.-smoothstep(.3,.6,fp*2.4)))*mix(.92,1.05,nz3.r);
-    float sandf=uDune*(1.-tuft)*.85;vec3 fc=mix(gc*mix(.78,1.,tuft),sc,sandf);c=mix(c,pow(fc,vec3(2.2)),fes*.88);}/* v1.27: fescue/dune shading also fades at the box edge (Pacific Dunes sand rectangle) */
+    float sandf=uDune*(1.-tuft)*.85;vec3 fc=mix(gc*mix(.78,1.,tuft),sc,sandf);c=mix(c,pow(fc,vec3(2.2)),fes*.88);}/* v1.28: fescue/dune shading also fades at the box edge (Pacific Dunes sand rectangle) */
   float slope=length(N.xy);float sdm=smoothstep(.3,.6,m.b);amb=mix(amb,vec3(dot(amb,vec3(.333)))*vec3(1.1,1.,.85),sdm);float fill=.58+.3*(1.-smoothstep(0.,.3,df))+gold*.25;vec3 col=c*(amb*fill+uSunCol*df*1.42)*(1.-clamp(slope*1.5,0.,.16)*grass);
   {float gm=smoothstep(.8,.95,m.g);col=mix(col,col*vec3(.97,.99,.95),gm);
     // green material: cross-cut mowing (soft light/dark bands), fine grain, collar ring and exaggerated slope shading
@@ -1042,9 +1044,10 @@ void main(){
   float w=smoothstep(.38,.62,m.r+(nz2.r-.5)*.1);
   if(uOuter>0.&&outd>0.){// beyond the hole box: edge-extended water only near the edge (no straight rays/spits to the horizon); open water by height against the sea/bay level
     w=step(.5,m.r)*(1.-smoothstep(25.,70.,outd))*(1.-step(1.5,uWv)*step(.5,uOutSea));/* v1.17: Pebble: no edge-extended sea rectangles */if(uOutSea>.5){float lv=uOutZ+min(outd*.004,5.);w=max(w,1.-smoothstep(lv+.4,lv+1.2,vP.z));}}
+  if(uEdgeSea>.5&&outd<=0.){float lv=uOutZ+bxE*bxE*14.;w=max(w,1.-smoothstep(lv+.4,lv+1.6,vP.z+(nz2.g-.5)*1.5));}/* v1.28 Cypress: land near the box edge recedes into the sea by height (no straight cut-off coast) */
   if(w>0.){vec3 V=normalize(vP-uEye);vec2 r=(texture(uNoise,vP.xy*.08+vec2(uTime*.02,uTime*.013)).rg+texture(uNoise,vP.xy*.21-vec2(uTime*.03,0.)).ba-1.)*.18;
     vec3 n=normalize(vec3(r,1.));vec3 rf=reflect(V,n);float fr=.04+.96*pow(1.-max(dot(-V,n),0.),5.);
-    float wd=mix(smoothstep(.5,1.,m.r),1.,max(step(.001,outd)*uOuter*smoothstep(0.,60.,outd),bxE*uOuter*.85));/* v1.27: in-box shallow-water tint fades at the box edge (Cypress 16 pale sea rectangle) */vec3 deep=mix(vec3(.025,.095,.105),vec3(.008,.04,.06),wd);vec3 rc=min(mix(skyCol(rf),uSkyTop,.45),vec3(1.));rc=uWv>.5?mix(rc,vec3(dot(rc,vec3(.333))),.35)*vec3(.34,.47,.5):rc*vec3(.34,.52,.58);/* v1.15: less saturated reflections (inland ponds read grey-green, not royal blue) */vec3 wc=mix(deep,rc,clamp(.1+fr*.42,0.,.45))+uSunCol*pow(max(dot(rf,uSun),0.),180.)*2.*clamp(1.-length(fwidth(vP.xy))*.35,0.,1.);/* glints fade when a pixel spans many noise texels (no dotted grid from above) */wc*=(.9+.2*nz3.g)*.68;
+    float wd=mix(smoothstep(.5,1.,m.r),1.,max(step(.001,outd)*uOuter*smoothstep(0.,60.,outd),bxE*uOuter*.85));/* v1.28: in-box shallow-water tint fades at the box edge (Cypress 16 pale sea rectangle) */vec3 deep=mix(vec3(.025,.095,.105),vec3(.008,.04,.06),wd);vec3 rc=min(mix(skyCol(rf),uSkyTop,.45),vec3(1.));rc=uWv>.5?mix(rc,vec3(dot(rc,vec3(.333))),.35)*vec3(.34,.47,.5):rc*vec3(.34,.52,.58);/* v1.15: less saturated reflections (inland ponds read grey-green, not royal blue) */vec3 wc=mix(deep,rc,clamp(.1+fr*.42,0.,.45))+uSunCol*pow(max(dot(rf,uSun),0.),180.)*2.*clamp(1.-length(fwidth(vP.xy))*.35,0.,1.);/* glints fade when a pixel spans many noise texels (no dotted grid from above) */wc*=(.9+.2*nz3.g)*.68;
     float shore=smoothstep(.35,.5,m.r)*(1.-smoothstep(.5,.75,m.r))*(1.-step(.001,outd)*uOuter);wc=mix(wc,vec3(.16,.2,.12)*.5,shore*(uWv>.5?.5:.35));
     float mb=textureLod(uMask,cuv,3.).r;float fo=(1.-smoothstep(.45,.95,mb))*w*uFoam*(1.-step(.001,outd)*uOuter);float wave=.5+.5*sin(mb*22.-uTime*1.3+nz.r*5.);fo*=smoothstep(.25,1.05,wave*(.5+.7*nz2.g))*(.45+.55*nz3.r)*smoothstep(.2,.55,textureLod(uMask,cuv,5.).r);
     wc=mix(wc,vec3(.82,.87,.88),clamp(fo*.6,0.,.6));float sfl=uFoam*(1.-step(.001,outd))*smoothstep(.40,.5,m.r)*(1.-smoothstep(.56,.75,m.r))*(.55+.45*sin(uTime*1.2+(vP.x+vP.y)*.25+nz2.r*4.))*(.6+.6*nz3.g);wc=mix(wc,vec3(.9,.93,.94),clamp(sfl,0.,.75));col=mix(col,wc,w);}
@@ -1204,7 +1207,7 @@ const PM=['lacc','riviera'].includes(cid)?[.8,0,0,1]:['seminole','tpc','sawgrass
   const hx=c=>[parseInt(c.slice(1,3),16)/255,parseInt(c.slice(3,5),16)/255,parseInt(c.slice(5,7),16)/255];const f1=hx(H.st.rough),f2=hx(H.st.deep);
   /* v1.25 all courses: far land takes the colour of the hole's own outer border (mean of a ring just inside the box, water excluded), so the box never reads as a rectangle on the overhead/far views (sand dunes stay sandy, parkland stays green) */
   let farC=[0,1,2].map(i=>f1[i]*.55+f2[i]*.45);try{const cv=P.cv,cx=cv.getContext('2d'),w=cv.width,h=cv.height,bw=Math.max(4,Math.round(w/H.W*14)),sm=[0,0,0];let n=0;
-    for(const [x0,y0,ww,hh] of [[0,0,w,bw],[0,h-bw,w,bw],[0,0,bw,h],[w-bw,0,bw,h]]){const d=cx.getImageData(x0,y0,ww,hh).data;for(let k=0;k<d.length;k+=4*7){const r=d[k],g=d[k+1],b=d[k+2];if(b>g+6||(r<40&&g<40)||r>g-4)continue;/* v1.27: sand/dune border pixels excluded: far land is vegetation colour */sm[0]+=r;sm[1]+=g;sm[2]+=b;n++}}
+    for(const [x0,y0,ww,hh] of [[0,0,w,bw],[0,h-bw,w,bw],[0,0,bw,h],[w-bw,0,bw,h]]){const d=cx.getImageData(x0,y0,ww,hh).data;for(let k=0;k<d.length;k+=4*7){const r=d[k],g=d[k+1],b=d[k+2];if(b>g+6||(r<40&&g<40)||r>g-4)continue;/* v1.28: sand/dune border pixels excluded: far land is vegetation colour */sm[0]+=r;sm[1]+=g;sm[2]+=b;n++}}
     if(n>50)farC=farC.map((v,i)=>v*.3+sm[i]/n/255*.7)}catch(e){}
   R.hole={H,tCol,tMask,ter,outer,mini:P.cv,far:farC};
   return P.cv}
@@ -1237,7 +1240,7 @@ function glDraw(R,cam,S){
     gl.uniform4f(u.uBall,S.ball.x,S.ball.y,S.ballShadow,S.ballShadowR||.09);const rg=S.ring||[0,0,0,0];gl.uniform4f(u.uRing,rg[0],rg[1],rg[2],rg[3]);
     const am=S.aim||[0,0,0,0];gl.uniform4f(u.uAim,am[0],am[1],am[2],am[3]);gl.uniform1f(u.uAimOn,S.aim?1:0);gl.uniform1f(u.uPutt,S.putt||0);
     const gm=H.gm;gl.uniform4f(u.uG0,gm.cx,gm.cy,gm.tx,gm.ty);const gb=new Float32Array(16);gm.b.slice(0,4).forEach((b,i)=>gb.set(b,i*4));gl.uniform4fv(u.uGb,gb);
-    gl.uniform1f(u.uFoam,R.hole.H.sea.length?1:0);if(u.uCliff)gl.uniform1f(u.uCliff,CLIFF_C[R.hole.H.course.id]?1:0);if(u.uDune)gl.uniform1f(u.uDune,['dunes','prairie'].includes(R.hole.H.course.style)||['pacificdunes','sandhills','friars','pinevalley'].includes(R.hole.H.course.id)?1:0);if(u.uSeaZ){const H=R.hole.H;if(H.seaZ===undefined)seaLevel(H);if(H.seaZ===undefined){const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9}gl.uniform1f(u.uSeaZ,H.seaZ)}{const H=R.hole.H;outSea(H);if(u.uOutSea)gl.uniform1f(u.uOutSea,H.outZ>-900?1:0);if(u.uWv)gl.uniform1f(u.uWv,({lookaway:1,augusta:1,pebble:2})[H.course.id]||0);if(u.uOutZ)gl.uniform1f(u.uOutZ,H.outZ)}gl.uniform1f(u.uOuter,0);gl.bindVertexArray(R.hole.ter.v);gl.drawElements(gl.TRIANGLES,R.hole.ter.n,gl.UNSIGNED_INT,0);
+    gl.uniform1f(u.uFoam,R.hole.H.sea.length?1:0);if(u.uEdgeSea)gl.uniform1f(u.uEdgeSea,0);if(u.uCliff)gl.uniform1f(u.uCliff,CLIFF_C[R.hole.H.course.id]?1:0);if(u.uDune)gl.uniform1f(u.uDune,['dunes','prairie'].includes(R.hole.H.course.style)||['pacificdunes','sandhills','friars','pinevalley'].includes(R.hole.H.course.id)?1:0);if(u.uSeaZ){const H=R.hole.H;if(H.seaZ===undefined)seaLevel(H);if(H.seaZ===undefined){const z=[];if(H.sea.length)for(let y=H.Y0+1;y<H.Y1-1;y+=3)for(let x=H.X0+1;x<H.X1-1;x+=3){const sf=H.surfAt(x,y);if(sf===S_WATER)z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.seaZ=z.length?z[z.length>>1]:-1e9}gl.uniform1f(u.uSeaZ,H.seaZ)}{const H=R.hole.H;outSea(H);if(u.uOutSea)gl.uniform1f(u.uOutSea,H.outZ>-900?1:0);if(u.uWv)gl.uniform1f(u.uWv,({lookaway:1,augusta:1,pebble:2})[H.course.id]||0);if(u.uOutZ)gl.uniform1f(u.uOutZ,H.outZ)}gl.uniform1f(u.uOuter,0);gl.bindVertexArray(R.hole.ter.v);gl.drawElements(gl.TRIANGLES,R.hole.ter.n,gl.UNSIGNED_INT,0);
     gl.uniform1f(u.uOuter,1);gl.uniform1f(u.uAimOn,0);gl.bindVertexArray(R.hole.outer.v);gl.drawElements(gl.TRIANGLES,R.hole.outer.n,gl.UNSIGNED_INT,0)}
   // trees (impostor billboards, alpha-tested, alpha-to-coverage)
   {const p=R.pTree;common(p);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,R.atl);gl.uniform1i(p.u.uAtl,3);if(p.u.uR3)gl.uniform1f(p.u.uR3,R.t3?T3R:0);if(p.u.uBbK)gl.uniform1f(p.u.uBbK,R.t3?.45:1);gl.disable(gl.CULL_FACE);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
@@ -1281,7 +1284,7 @@ function outSea(H){if(H.outZ!==undefined)return H.outZ;let n=0,wn=0;const z=[];c
   for(let y=H.Y0+1;y<H.Y1-1;y+=2)for(let x=H.X0+1;x<H.X1-1;x+=2){if(Math.min(x-H.X0,H.X1-x,y-H.Y0,H.Y1-y)>20)continue;if(isW(x,y))z.push(H.hAt(x,y))}z.sort((a,b)=>a-b);H.outZ=z.length?z[z.length>>1]:-1e9;return H.outZ}
 function treeSpotOK(H,x,y,r){if(H.course.id==='augusta'&&H.hi===16&&y>140&&y<260&&Math.abs(x)<34)return false;if(H.inBld&&H.inBld(x,y,r*.5+1))return false;const inB=(px,py)=>px>H.X0+.5&&px<H.X1-.5&&py>H.Y0+.5&&py<H.Y1-.5;const h2=1.6,pts=[[0,0],[r,0],[-r,0],[0,r],[0,-r],[r*.7,r*.7],[-r*.7,r*.7],[r*.7,-r*.7],[-r*.7,-r*.7],[h2,0],[-h2,0],[0,h2],[0,-h2],[2.2,0],[-2.2,0],[0,2.2],[0,-2.2]];
   const sz=H.sea.length?seaLevel(H):-1e9;
-  {const L=H.line;if(L&&L.length>1){const bx=L[1][0]-L[0][0],by=L[1][1]-L[0][1],l=Math.hypot(bx,by)||1;const t=(x*bx+y*by)/l;{const aug=H.course.id==='augusta',tm=aug?130:100;if(t>-10&&t<Math.min(tm,l)){const d=Math.abs(x*by-y*bx)/l;if(d<(aug?13+t*.18:9+t*.12))return false}}/* v1.27: wider open tee sightline (no thin trees right in front of the tee; Augusta widest) */}}// keep the tee shot's sightline open (no trees crowding the tee line)
+  {const L=H.line;if(L&&L.length>1){const bx=L[1][0]-L[0][0],by=L[1][1]-L[0][1],l=Math.hypot(bx,by)||1;const t=(x*bx+y*by)/l;{const aug=H.course.id==='augusta',tm=aug?130:100;if(t>-10&&t<Math.min(tm,l)){const d=Math.abs(x*by-y*bx)/l;if(d<(aug?13+t*.18:9+t*.12))return false}}/* v1.28: wider open tee sightline (no thin trees right in front of the tee; Augusta widest) */}}// keep the tee shot's sightline open (no trees crowding the tee line)
   for(const q of pts){const px=x+q[0],py=y+q[1];if(inB(px,py)){const s=H.surfAt(px,py);if(s===S_WATER||s===S_FW||s===S_TEE||s===S_FRINGE||s===S_GREEN||s===S_SAND)return false;if(sz>-900&&H.hAt(px,py)<sz+1.4)return false}
     else{// beyond the box the renderer extends the edge mask outward and floods anything below the sea level
       const od=Math.max(H.X0-px,px-H.X1,H.Y0-py,py-H.Y1,0);if(od<75&&H.surfAt(clamp(px,H.X0+1,H.X1-1),clamp(py,H.Y0+1,H.Y1-1))===S_WATER)return false;{const oz=outSea(H);if(oz>-900&&H.demAt(px,py)<oz+1.4+Math.min(od*.004,5))return false}}}
@@ -1565,7 +1568,7 @@ function setAddress(fromShot){
   const b=G.ball;b.surf=G.H.surfAt(b.x,b.y);G.phase=b.surf===S_GREEN?'putt':'address';
   recommend();G.club=G.rec.ci;if(G.phase==='putt')G.club=PUTTER;else if(G.club===PUTTER){if(b.surf===S_FRINGE||b.surf===S_FW)G.phase='putt';else{G.club=9}}// putter off the green = putt mode (never a full swing with the putter)
   defaultAim();G.puttFt=0;G.sw=null;
-  G.cam=null;updClubs();updHUD();if(G.phase==='putt')G.view=0;camSnap()}
+  const pc=G.cam;G.cam=null;updClubs();updHUD();if(G.phase==='putt')G.view=0;camSnap();camBlendFrom(pc)}
 function afterLoad(){setAddress()}
 // ---------- swing ----------
 function shotPower(){return G.sw?G.sw.pow:0}
@@ -1659,6 +1662,11 @@ function camAddress(){const b=G.ball,H=G.H,h=H.hAt(b.x,b.y),ax=Math.cos(G.aim),a
     const bk=3.3+d0*.03,up=1.25+d0*.014,tx=b.x+ax*d0,ty=b.y+ay*d0;const ez=Math.max(h+up,H.hAt(b.x-ax*bk,b.y-ay*bk)+1.1);const gzT=Math.min(H.hAt(tx,ty),H.hAt(H.cup.x,H.cup.y));const pitch=-d0*.035;return{eye:v3(b.x-ax*bk,b.y-ay*bk,ez),at:v3(tx,ty,gzT-pitch),fov:clamp(.66+(70-d0)*.002,.66,.78)}}}// pitched down: green + flag fill the lower-middle of the frame, horizon still in view
   const tgt=G.ring||{x:b.x+ax*150,y:b.y+ay*150};const dd=clamp(Math.hypot(tgt.x-b.x,tgt.y-b.y),30,260);const tx=b.x+ax*dd,ty=b.y+ay*dd;const bk=5.4+dd*.025,up=2.8+dd*.028;return{eye:v3(b.x-ax*bk,b.y-ay*bk,h+up),at:v3(tx,ty,Math.max(H.hAt(tx,ty)+1,h+up-dd*.055)),fov:clamp(2*Math.atan(40/dd),.5,.8)}}
 function camSnap(){G.cam=camAddress();G.camT=null}
+/* v1.28: smooth camera transitions: eased blend from the previous view instead of a hard cut (skipped for big jumps, e.g. a new hole) */
+function camCopy(c){return{eye:c.eye.slice(),at:c.at.slice(),fov:c.fov}}
+function easeIO(x){x=clamp(x,0,1);return x*x*x*(x*(x*6-15)+10)}
+function camBlendFrom(pc,T){G.camBl=null;if(!pc||!G.cam||!pc.eye)return;const d=Math.hypot(pc.eye[0]-G.cam.eye[0],pc.eye[1]-G.cam.eye[1],pc.eye[2]-G.cam.eye[2]);if(d<.05||d>140)return;G.camBl={from:camCopy(pc),t:0,T:T||clamp(.55+d/90,.6,1.4),out:G.cam}}
+function camBlendApply(dt,tgt){const B=G.camBl;if(!B)return false;if(G.cam!==B.out){G.camBl=null;return false}/* camera set elsewhere (view toggle, replay, tools): cancel blend */B.t+=dt;const e=easeIO(B.t/B.T);const c={eye:[0,0,0],at:[0,0,0],fov:lerp(B.from.fov,tgt.fov,e)};for(let i=0;i<3;i++){c.eye[i]=lerp(B.from.eye[i],tgt.eye[i],e);c.at[i]=lerp(B.from.at[i],tgt.at[i],e)}if(G.H){const gz=G.H.hAt(c.eye[0],c.eye[1])+1.;if(c.eye[2]<gz)c.eye[2]=gz}G.cam=c;B.out=c;if(B.t>=B.T)G.camBl=null;return true}
 function camLerp(c,t,k){for(let i=0;i<3;i++){c.eye[i]=lerp(c.eye[i],t.eye[i],k);c.at[i]=lerp(c.at[i],t.at[i],k)}c.fov=lerp(c.fov,t.fov,k)}
 function ballAt(a,t){const f=t*60,i=Math.min(a.n-1,Math.floor(f)),j=Math.min(a.n-1,i+1),u=f-Math.floor(f);const P=a.P;return[lerp(P[i*3],P[j*3],u),lerp(P[i*3+1],P[j*3+1],u),lerp(P[i*3+2],P[j*3+2],u)]}
 function landingCam(a){const H=G.H,L=a.land,dx=L.x-a.from.x,dy=L.y-a.from.y,d=Math.hypot(dx,dy)||1,ux=dx/d,uy=dy/d;
@@ -1677,7 +1685,7 @@ function updCam(dt){
   if(G.phase==='flight'){const a=G.anim;const bp=ballAt(a,a.t);const tf=a.tf;
     if(a.put){const t=camAddress();if(!G.cam)G.cam=t;const k=1-Math.exp(-dt*2);const at=v3(bp[0],bp[1],bp[2]);G.cam.at=G.cam.at.map((v,i)=>lerp(v,at[i],k));return}
     const carry=Math.hypot(a.land.x-a.from.x,a.land.y-a.from.y);
-    if(carry>95&&a.t>tf*.5){if(G.camMode!=='land'){G.camMode='land';G.cam=landingCam(a)}const k=1-Math.exp(-dt*6);const at=v3(bp[0],bp[1],bp[2]+.5);G.cam.at=G.cam.at.map((v,i)=>lerp(v,at[i],k));G.cam.fov=lerp(G.cam.fov,carry>200?.55:.65,dt*.6);return}
+    if(carry>95&&a.t>tf*.5){if(G.camMode!=='land'){G.camMode='land';const pc=G.cam?camCopy(G.cam):null;a.lc=landingCam(a);a.lc0=pc;a.lt=0;G.cam=camCopy(pc||a.lc)}if(a.lc0){a.lt+=dt;const e=easeIO(a.lt/1.4);for(let i=0;i<3;i++)G.cam.eye[i]=lerp(a.lc0.eye[i],a.lc.eye[i],e);{const dd=Math.hypot(a.lc.eye[0]-a.lc0.eye[0],a.lc.eye[1]-a.lc0.eye[1]);G.cam.eye[2]=Math.max(G.cam.eye[2]+Math.sin(Math.PI*e)*Math.min(35,dd*.14),G.H.hAt(G.cam.eye[0],G.cam.eye[1])+2)}if(e>=1)a.lc0=null}const k=1-Math.exp(-dt*6);const at=v3(bp[0],bp[1],bp[2]+.5);G.cam.at=G.cam.at.map((v,i)=>lerp(v,at[i],k));G.cam.fov=lerp(G.cam.fov,carry>200?.55:.65,dt*.6);return}
     // follow: stay behind origin, track ball, drift forward and up for short shots
     const ax=Math.cos(G.aim),ay=Math.sin(G.aim);const fr=clamp(a.t/Math.max(.1,tf),0,1);
     let ex=a.from.x-ax*5.2,ey=a.from.y-ay*5.2,ez=H.hAt(a.from.x,a.from.y)+2.5+fr*3;
@@ -1685,8 +1693,9 @@ function updCam(dt){
       if(!a.cam0)a.cam0={eye:(G.cam?G.cam.eye:camAddress().eye).slice()};const c0=a.cam0;const f2=smooth(Math.min(1,a.t/1.1));const cx=bp[0]-ax*6.5,cy=bp[1]-ay*6.5;const gz=H.hAt(cx,cy);const bz=H.hAt(bp[0],bp[1]);const cz=Math.max(gz+1.3,Math.min(gz+1.3+(bp[2]-bz)*.35,gz+4.2));a.chase=1;
       ex=lerp(c0.eye[0],cx,f2);ey=lerp(c0.eye[1],cy,f2);ez=Math.max(lerp(c0.eye[2],cz,f2),H.hAt(ex,ey)+1.1)}
     const k=1-Math.exp(-dt*8);const at=a.chase?v3(bp[0]+ax*1.5,bp[1]+ay*1.5,lerp(bp[2],H.hAt(bp[0],bp[1]),.18)):v3(bp[0],bp[1],bp[2]);// chase: tilt up with the ball so it stays in frameif(!G.cam)G.cam=camAddress();
+    if(!a.chase){if(!a.cs)a.cs=(G.cam?G.cam.eye:camAddress().eye).slice();const e0=easeIO(a.t/.45);ex=lerp(a.cs[0],ex,e0);ey=lerp(a.cs[1],ey,e0);ez=lerp(a.cs[2],ez,e0)}/* v1.28: eased start of the follow cam */
     G.cam.eye=[ex,ey,ez];G.cam.at=G.cam.at.map((v,i)=>lerp(v,at[i],a.chase?1-Math.exp(-dt*14):k));G.cam.fov=lerp(G.cam.fov,a.chase?.8:.66,dt*.8);return}
-  if(G.phase==='address'||G.phase==='putt'||G.phase==='swing'){const t=camAddress();if(!G.cam)G.cam=t;camLerp(G.cam,t,1-Math.exp(-dt*9));return}
+  if(G.phase==='address'||G.phase==='putt'||G.phase==='swing'){const t=camAddress();if(!G.cam)G.cam=t;if(G.camBl&&camBlendApply(dt,t))return;camLerp(G.cam,t,1-Math.exp(-dt*9));return}
   if(G.phase==='holed'||G.phase==='rest'){if(G.cam){const t=G.cam;t.at=t.at.slice()}}}
 function startIntro(){const H=G.H;G.phase='intro';G.intro={t:0,T:clamp(3+H.yards/160,3.6,6.5)};
   const c=H.course;const isR=G.mode==='round';const n=H.hi+1;
@@ -1776,8 +1785,8 @@ function drawMeter(){const c=$('meter');if(c.classList.contains('hide'))return;c
   const chip=typeof chipOn==='function'&&chipOn();const rp=chip?(G.club===G.rec.ci?G.rec.pw:chipMeterPw()):G.club===(G.rec&&G.rec.ci)?G.rec.pw:1;tick(rp,'#3fe0b0',22,6);
   for(let v=.25;v<1.01;v+=.25)tick(v,'rgba(255,255,255,.5)',12,2);
   const s=G.sw;let val=0,label='';
-  if(s&&!s.putt){if(s.phase==='up'){val=s.pow;const gr=g.createLinearGradient(0,H,0,0);gr.addColorStop(0,'#3fe0b0');gr.addColorStop(.75,'#ffd24a');gr.addColorStop(1,'#ff6a4a');g.lineCap='round';g.strokeStyle=gr;g.lineWidth=12;g.beginPath();g.arc(cx,cy,R,ang(s.pow),ang(lo+.001));g.stroke();label=chip?Math.round(s.pow*G.chip.max)+' YD':Math.round(s.pow*100)+'%'}
-    else{tick(s.pow,'#ffd24a',26,7);const v=s.cur!==undefined?s.cur:s.pow;const a=ang(v);g.fillStyle='#fff';g.beginPath();g.arc(cx+Math.cos(a)*R,cy+Math.sin(a)*R,13,0,TAU);g.fill();g.strokeStyle='#000';g.lineWidth=3;g.stroke();label=chip?Math.round(s.pow*G.chip.max)+' YD':Math.round(s.pow*100)+'%'}}
+  if(s&&!s.putt){const tn=swNow();/* v1.28: meter drawn from the exact time each frame (smooth, no stepping); timing unchanged */if(s.phase==='up'){s.pow=Math.min(1.15,swValue(s,tn));val=s.pow;const gr=g.createLinearGradient(0,H,0,0);gr.addColorStop(0,'#3fe0b0');gr.addColorStop(.75,'#ffd24a');gr.addColorStop(1,'#ff6a4a');g.lineCap='round';g.strokeStyle=gr;g.lineWidth=12;g.beginPath();g.arc(cx,cy,R,ang(s.pow),ang(lo+.001));g.stroke();{const ah=ang(s.pow),hx=cx+Math.cos(ah)*R,hy=cy+Math.sin(ah)*R,rg=g.createRadialGradient(hx,hy,0,hx,hy,18);rg.addColorStop(0,'rgba(255,255,255,.95)');rg.addColorStop(.35,'rgba(255,240,200,.55)');rg.addColorStop(1,'rgba(255,240,200,0)');g.fillStyle=rg;g.beginPath();g.arc(hx,hy,18,0,TAU);g.fill();}label=chip?Math.round(s.pow*G.chip.max)+' YD':Math.round(s.pow*100)+'%'}
+    else{tick(s.pow,'#ffd24a',26,7);const v=s.phase==='down'?Math.max(-.22,swValue(s,tn)):(s.cur!==undefined?s.cur:s.pow);for(let k=3;k>=1;k--){const vg=Math.min(s.pow,v+k*.018*(s.k||1));const ag=ang(vg);g.fillStyle='rgba(255,255,255,'+(.22-.06*k)+')';g.beginPath();g.arc(cx+Math.cos(ag)*R,cy+Math.sin(ag)*R,13-k*2,0,TAU);g.fill();}const a=ang(v);g.fillStyle='#fff';g.beginPath();g.arc(cx+Math.cos(a)*R,cy+Math.sin(a)*R,13,0,TAU);g.fill();g.strokeStyle='#000';g.lineWidth=3;g.stroke();label=chip?Math.round(s.pow*G.chip.max)+' YD':Math.round(s.pow*100)+'%'}}
   else if(chip)label=Math.round(rp*G.chip.max)+' YD';else if(G.lastSw)label=Math.round(G.lastSw.pow*100)+'%';
   g.fillStyle='#fff';g.font='900 46px Helvetica,Arial,sans-serif';g.textAlign='right';g.textBaseline='alphabetic';g.fillText(label||'0%',W*.99,H*.99);
   g.font='900 19px Helvetica,Arial,sans-serif';g.textAlign='left';g.fillStyle='rgba(255,255,255,.9)';
@@ -1856,7 +1865,7 @@ function inputInit(){
    tap 3: at the sweet-spot line for accuracy (early = pull/draw, late = push/fade) */
 const SW_UP=2600/1.15,SW_DOWN=SW_UP/1.75,SW_TEMPO=1.75;
 function swNow(){return performance.now()}
-/* v1.27: difficulty = swing meter speed only */
+/* v1.28: difficulty = swing meter speed only */
 const DIFF=[['Reggie',.6],['Easy',.8],['Medium',1],['Hard',1.2],['PGA',1.45],['Woods',1.75]];
 function diffI(){const v=store('ts.diff');return v===null||v===undefined||!DIFF[+v]?2:+v}
 function swValue(s,t){const k=s.k||1;if(s.phase==='up')return Math.min(1.15,(t-s.t0)*k/SW_UP);return s.pow-(t-s.tPow)*k/SW_DOWN}
@@ -2428,7 +2437,7 @@ function updPinBtn(){const b=$('pinT');if(b){b.textContent=pinIn()?'PIN IN':'PIN
 function pinHidden(){return !pinIn()&&G.mode!=='menu'&&(G.phase==='putt'||((G.phase==='flight'||G.phase==='replay')&&G.anim&&G.anim.put))}
 /* the Pin In / Pin Out toggle shows only while a putt is being set up (putting view), hidden for every other shot and screen */
 function pinBtnWanted(){// only while the ball sits on the green and the player is setting up (never on the tee, fairway, rough, sand or fringe, never in pre-round setup)
-  return !!(G.mode&&G.mode!=='menu'&&!G.replay&&G.ball&&G.ball.surf===S_GREEN&&(G.phase==='putt'||G.phase==='address'))}
+  return !!(G.mode&&G.mode!=='menu'&&!G.replay&&G.ball&&(G.phase==='putt'||(G.ball.surf===S_GREEN&&G.phase==='address')))}/* v1.28: also whenever putting (fringe/fairway putts) */
 function pinBtnSync(){try{const b=$('pinT');if(b){const w=pinBtnWanted();const d=w?'inline-block':'none';if(b.style.display!==d)b.style.display=d;if(w){{const p=pinWho();if(p){const v=store('ts.pin.p.'+p);if(v!=='in'&&v!=='out')store('ts.pin.p.'+p,pinIn()?'in':'out')}}updPinBtn();if(G.H&&G.H.cup)G.H.cup.pin=pinIn()}}}catch(e){}}
 (function pinBtnLoop(){pinBtnSync();requestAnimationFrame(pinBtnLoop)})();
 // show it the moment a putt is set up (not a frame later), for every player in pass-and-play
