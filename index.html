@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.19';
+const VERSION='v1.20';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -551,6 +551,9 @@ const TREE_DEFAULT=[[1,.45],[2,.35],[7,.2]];
 function treeMix(cid){return TREE_MIX[cid]||TREE_DEFAULT}
 function pickSpecies(mix,r){let a=0;for(const [s,w] of mix){a+=w;if(r<a)return s}return mix[0][0]}
 
+/* v1.20 shared coast/cliff fix: COAST_C = courses on the open sea (sea-level DEM cells beyond the mapped box become sea, terrain-driven beach/rock shoreline); CLIFF_C = bluff coasts (shoreline drop is a ~1 yd rock face) */
+const COAST_C={pebble:1,cypress:1,pacificdunes:1,friars:1,fishers:1,ngla:1,seminole:1},CLIFF_C={pebble:1,cypress:1,pacificdunes:1,friars:1,fishers:1};
+function seaFloor(id){const D=DEMS[id];if(!D)return -1e9;if(D.sf===undefined){let m=1e9;for(const v of D.A)if(v<m)m=v;D.sf=m}return D.sf}
 'use strict';
 /* Builds a playable hole (hole frame: tee at origin, play toward +y, x = right) from compact course geometry. */
 const STYLE={
@@ -585,6 +588,8 @@ function buildHole0(course,geo,hi,teeIdx,opts){
   const tf=p=>{const x=p[0]-T0[0],y=p[1]-T0[1];return[x*cr-y*sr,x*sr+y*cr]};
   const toRaw=(x,y)=>[T0[0]+x*cr+y*sr,T0[1]-x*sr+y*cr];
   const dT=demSample(course.id,T0[0],T0[1]);const dz=(x,y)=>{const r=toRaw(x,y);return demSample(course.id,r[0],r[1])-dT};
+  // v1.20 coastal courses (shared): DEM cells at sea level (fine grid floor 1.33, far grid 0) beyond the mapped box are sea: sink them well under the water line so no coarse land blocks show in the ocean; smooth 0.5 m transition keeps the coastline soft
+  const sf=COAST_C[course.id]?seaFloor(course.id):null;const dzP=(x,y)=>{const r=toRaw(x,y),v=demSample(course.id,r[0],r[1]);return v-dT-3.2*smooth(clamp((sf+.62-v)/.55,0,1))};
   const hl=line.map(tf);let mnx=-30,mxx=30,mxy=0;for(const p of hl){mnx=Math.min(mnx,p[0]);mxx=Math.max(mxx,p[0]);mxy=Math.max(mxy,p[1])}
   const X0=Math.floor(mnx-95),X1=Math.ceil(mxx+95),Y0=-45,Y1=Math.ceil(mxy+70),W=X1-X0,H=Y1-Y0;
   const inR=P=>{for(const p of P)if(p[0]>X0-20&&p[0]<X1+20&&p[1]>Y0-20&&p[1]<Y1+20)return true;return false};
@@ -722,11 +727,11 @@ const WAT=(F.wa||[]).concat(sea);const PLAY=(F.fw||[]).concat(F.gr||[],F.te||[])
     if(CRK.length){const q=crkD(x,y,5);if(q[0]<4.5){const tp=smooth(clamp(q[1]/7,0,1));h-=tp*(.8*smooth(clamp((4.5-q[0])/3.2,0,1))+.15*smooth(clamp((1.3-q[0])/1.3,0,1)))}}
     HT[j*NW+i]=h}
   // rocky coasts (Cypress, Pebble, Pacific Dunes): the coarse DEM smears the bluffs into ramps, so keep the inland bluff height to the mapped shoreline and drop it as a cliff face
-  if({pebble:1,cypress:1,pacificdunes:1}[course.id]&&sea.length){const sc=polyCov(sea),n1=boxF(sc,1),n8=boxF(sc,8);const zs=[];for(let j=0;j<NH;j+=2)for(let i=0;i<NW;i+=2)if(cellM(sc,i,j)>.9)zs.push(HT[j*NW+i]);
+  if(CLIFF_C[course.id]&&sea.length){const sc=polyCov(sea),n1=boxF(sc,1),n8=boxF(sc,8);const zs=[];for(let j=0;j<NH;j+=2)for(let i=0;i<NW;i+=2)if(cellM(sc,i,j)>.9)zs.push(HT[j*NW+i]);
     if(zs.length>20){zs.sort((a,b)=>a-b);const sz=zs[zs.length>>1];const H2=Float32Array.from(HT);
       for(let j=0;j<NH;j++)for(let i=0;i<NW;i++){const b8=cellM(n8,i,j);if(b8<=0.002)continue;const k=j*NW+i,cs=cellM(sc,i,j);
         if(cs<.5){let hp=H2[k];for(let v=-9;v<=9;v+=3)for(let u=-9;u<=9;u+=3){const ii=clamp(i+u,0,NW-1),jj=clamp(j+v,0,NH-1);if(cellM(sc,ii,jj)<.3)hp=Math.max(hp,H2[jj*NW+ii])}
-          const lift=hp-sz>3?smooth(clamp(b8*4,0,1)):0;let h=lerp(H2[k],Math.max(H2[k],hp-.4),lift*.85);const e=cellM(n1,i,j);h=lerp(h,sz-.8,smooth(clamp((e-.05)/.4,0,1)));HT[k]=h}
+          const lift=hp-sz>3?smooth(clamp(b8*4,0,1)):0;let h=lerp(H2[k],Math.max(H2[k],hp-.4),lift*.85);const e=cellM(n1,i,j);h=lerp(h,sz-.8,1?smooth(clamp((e-.3)/.16,0,1)):smooth(clamp((e-.05)/.4,0,1)))/* v1.20 all cliff coasts: the drop happens over ~1 yd at the mapped shoreline = a rock face, not a ramp */;HT[k]=h}
         else HT[k]=Math.min(H2[k],sz-.8)}}}
   const hAt=(x,y)=>{const fx=clamp(x-X0,0,W-.001),fy=clamp(y-Y0,0,H-.001),i=Math.floor(fx),j=Math.floor(fy),u=fx-i,v=fy-j,k=j*NW+i;
     return(HT[k]*(1-u)+HT[k+1]*u)*(1-v)+(HT[k+NW]*(1-u)+HT[k+NW+1]*u)*v};
@@ -774,7 +779,7 @@ const WAT=(F.wa||[]).concat(sea);const PLAY=(F.fw||[]).concat(F.gr||[],F.te||[])
   for(let i=blds.length-1;i>=0;i--){const b=blds[i];const cx=b.P.reduce((a,p)=>a+p[0],0)/b.P.length,cy=b.P.reduce((a,p)=>a+p[1],0)/b.P.length;let bad=Math.hypot(cx,cy)<30||segD(cx,cy,hl)<18;
     for(const p of b.P){const ib=p[0]>X0+1&&p[0]<X1-1&&p[1]>Y0+1&&p[1]<Y1-1;const k=ib?surfAt(p[0],p[1]):1;if((k>=2&&k<=6)||Math.hypot(p[0],p[1])<85)bad=true}if(bad)blds.splice(i,1)}// drop footprints on play surfaces / the tee / the line (stale or misprojected OSM)
   for(let i=trees.length-1;i>=0;i--){const t=trees[i];if(inBld(t.x,t.y,0)||(CRK.length&&crkD(t.x,t.y,4)[0]<3.2)||(course.id==='augusta'&&hi===16&&t.y>140&&t.y<260&&segD(t.x,t.y,hl)<30))trees.splice(i,1)}// Augusta 17: Eisenhower Tree zone (removed 2014) kept open// no trees growing through roofs
-  return{crk:CRK,blds,inBld,addTree,rot,course,hi,par,yards,teeIdx,line:hl,X0,Y0,X1,Y1,W,H,S:SU,HT,NW,NH,hAt,surfAt,slopeAt,greenH,greenG,gm,G,F,sea,cup,trees,treeHit,st,woodMask,tee:{x:0,y:0},pews,toRaw,demAt:dz,gradAt,teeFix:opts.teeFix,name:(course.names&&course.names[hi])||(hd.nm&&!/\d|hole|course/i.test(hd.nm)?hd.nm:''),sig:course.sig&&course.sig[hi+1],quarry:QP,synth:opts.synth||[],grid:opts.grid}}
+  return{crk:CRK,blds,inBld,addTree,rot,course,hi,par,yards,teeIdx,line:hl,X0,Y0,X1,Y1,W,H,S:SU,HT,NW,NH,hAt,surfAt,slopeAt,greenH,greenG,gm,G,F,sea,cup,trees,treeHit,st,woodMask,tee:{x:0,y:0},pews,toRaw,demAt:sf!==null?dzP:dz,gradAt,teeFix:opts.teeFix,name:(course.names&&course.names[hi])||(hd.nm&&!/\d|hole|course/i.test(hd.nm)?hd.nm:''),sig:course.sig&&course.sig[hi+1],quarry:QP,synth:opts.synth||[],grid:opts.grid}}
 
 function projOn(L,x,y){let best=1e9,bs=0,acc=0;for(let i=0;i<L.length-1;i++){const a=L[i],b=L[i+1],dx=b[0]-a[0],dy=b[1]-a[1],l2=dx*dx+dy*dy||1,l=Math.sqrt(l2);let t=((x-a[0])*dx+(y-a[1])*dy)/l2;if(i>0)t=Math.max(0,t);t=Math.min(1,t);const d=Math.hypot(a[0]+dx*t-x,a[1]+dy*t-y);if(d<best){best=d;bs=acc+t*l}acc+=l}return bs}
 // place tee so straight tee->pin distance equals scorecard yardage, on land, preferring OSM tee boxes
@@ -849,6 +854,7 @@ function paintHole(H,PX){
       g.fillStyle='rgba(120,150,70,.25)';g.fillRect(q.v0+4,-(u+w*.45),q.v1-q.v0-8,w*.3)}g.restore()}
   // shorelines: rock revetment / seawall on rocky coasts, sand beach elsewhere; muddy bank on lakes
   const rocky={pebble:1,cypress:1,pacificdunes:1}[H.course.id];
+  if(H.sea.length&&COAST_C[H.course.id])pebShore(H,g);else
   if(H.sea.length){g.lineJoin='round';
     if(rocky){g.strokeStyle='#5d574d';g.lineWidth=5.5;for(const P of H.sea){path(P);g.stroke()}g.strokeStyle='#7b7468';g.lineWidth=3;for(const P of H.sea){path(P);g.stroke()}
       const RR=RNG('rk'+H.course.id+H.hi);for(const P of H.sea)for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);for(let t=0;t<L;t+=1.6){const f=t/L,x=a[0]+(b[0]-a[0])*f+RR.range(-2.2,2.2),y=a[1]+(b[1]-a[1])*f+RR.range(-2.2,2.2);
@@ -907,6 +913,24 @@ function paintHole(H,PX){
   const cA=chan(q=>{fromS(q,s=>(native&&H.course.id!=='chicago'&&(s===8||s===0))?128:0);if(H.course.id==='chicago'){q.fillStyle='rgb(128,128,128)';for(const P of(F.na||[])){pth(q,P);q.fill()}}q.fillStyle='#000';for(const P of(F.fw||[]).concat(F.te||[],F.gr,F.bk||[])){pth(q,P);q.fill()}});
   for(let r=0;r<mh;r++){const d0=(mh-1-r)*mw*4,s0=r*mw*4;for(let i=0;i<mw*4;i+=4){md[d0+i]=cR[s0+i];md[d0+i+1]=cG[s0+i];md[d0+i+2]=cB[s0+i];md[d0+i+3]=cA[s0+i]}}
   return{cv,mask:md,mw,mh}}
+
+/* v1.20 shared coast (all COAST_C courses): the shoreline reads from the terrain. Low, gently rising shore = sand beach (Stillwater Cove, Carmel Bay);
+   high bluff = a dark rock toe plus boulders, and every steep coastal face is painted as rock (not grass), so cliffs read as rock walls, not green ramps. */
+function pebShore(H,g){const X0=H.X0,Y1=H.Y1,sz=seaLevel(H),RR=RNG('pk'+H.hi);g.lineJoin='round';g.lineCap='round';
+  const rise=(x,y,nx,ny)=>Math.max(H.hAt(x+nx*7,y+ny*7),H.hAt(x-nx*7,y-ny*7),H.hAt(x+nx*14,y+ny*14),H.hAt(x-nx*14,y-ny*14))-sz;
+  const inB=(x,y)=>x>X0+1&&x<H.X1-1&&y>H.Y0+1&&y<Y1-1;
+  const segs=[];for(const P of H.sea)for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<.01)continue;const n=Math.ceil(L/3);
+    for(let k=0;k<n;k++){const f0=k/n,f1=(k+1)/n,x0=a[0]+(b[0]-a[0])*f0,y0=a[1]+(b[1]-a[1])*f0,x1=a[0]+(b[0]-a[0])*f1,y1=a[1]+(b[1]-a[1])*f1,mx=(x0+x1)/2,my=(y0+y1)/2;if(!inB(mx,my))continue;
+      segs.push([x0,y0,x1,y1,rise(mx,my,-(y1-y0)/(L/n),(x1-x0)/(L/n))<2.4])}}
+  const st=(w,c,beach)=>{g.strokeStyle=c;g.lineWidth=w;g.beginPath();for(const q of segs)if(q[4]===beach){g.moveTo(q[0]-X0,Y1-q[1]);g.lineTo(q[2]-X0,Y1-q[3])}g.stroke()};
+  st(10,'#d9cba4',true);st(4,'#c4b48c',true);st(2,'#a99872',true);
+  st(5.5,'#4f4a42',false);st(3,'#6e675c',false);
+  for(const q of segs){if(q[4])continue;const L=Math.hypot(q[2]-q[0],q[3]-q[1]);for(let t=0;t<L;t+=1.7){const f=t/L,x=q[0]+(q[2]-q[0])*f+RR.range(-2,2),y=q[1]+(q[3]-q[1])*f+RR.range(-2,2);
+    const v=RR.range(.7,1.15),rx=RR.range(.7,1.8),ry=rx*RR.range(.55,.85),ro=RR()*3,X=x-X0,Y=Y1-y;g.fillStyle=`rgb(${120*v|0},${112*v|0},${100*v|0})`;g.beginPath();g.ellipse(X,Y,rx,ry,ro,0,TAU);g.fill()}}
+  // steep coastal faces -> rock (sandstone/granite greys with streaks); only on rough-type ground within reach of the sea level
+  for(let y=H.Y0+1;y<Y1-1;y+=1)for(let x=X0+1;x<H.X1-1;x+=1){const z=H.hAt(x,y);if(z-sz>24||z<sz+.2)continue;const s=H.surfAt(x,y);if(s!==S_ROUGH&&s!==S_DEEP&&s!==S_OB)continue;
+    const gr=H.gradAt(x,y),m=Math.hypot(gr[0],gr[1]);if(m<.75)continue;const a=Math.min(1,(m-.75)/.6),v=.78+.3*hash2(x*7+y,y*3-x);
+    g.fillStyle=`rgba(${118*v|0},${108*v|0},${94*v|0},${(.55+.45*a).toFixed(2)})`;g.fillRect(x-X0-.5,Y1-y-.5,1.05,1.05)}}
 
 'use strict';
 /* Hand-written WebGL2 renderer: terrain, sky, water, trees, flag, ball, tracer */
@@ -1020,6 +1044,7 @@ void main(){
     vec2 dp=cell+dir*(ph-.5)*.9;float dd=length(q-dp);float a=(1.-smoothstep(.05,.09,dd))*smoothstep(0.,.25,ph)*(1.-smoothstep(.75,1.,ph));
     vec3 sc=mix(vec3(.3,.7,1.),mix(vec3(1.,.95,.3),vec3(1.,.3,.2),smoothstep(.02,.04,gm)),smoothstep(.006,.02,gm));col=mix(col,sc,a*uPutt);}
   {vec3 cf=fogit(col,vP);col=mix(cf,mix(col,cf,.5),w);}
+  if(uOuter>0.&&outd>0.)col=mix(col,uFogCol,smoothstep(650.,2800.,outd)*.88);/* v1.20 all courses: far terrain fades into the horizon haze (no hard far blocks/edges) */
   o=vec4(pow(tm(col),vec3(1./2.2)),1.);}`);
   R.pSky=prog(`
 layout(location=0) in vec2 aP;out vec2 vU;void main(){vU=aP;gl_Position=vec4(aP,.9999,1.);}`,`
@@ -1134,9 +1159,9 @@ function glSetHole(R,H,PX){
   const BIG=5000;const axis=(a0,a1)=>{const o=[];for(let v=a0;v<a1;v+=12)o.push(v);o.push(a1);let st2=12,v=a0;while(v>a0-BIG){st2*=1.13;v-=st2;o.unshift(v)}st2=12;v=a1;while(v<a1+BIG){st2*=1.13;v+=st2;o.push(v)}return o};
   const XS=axis(H.X0+.5,H.X1-.5),YS=axis(H.Y0+.5,H.Y1-.5);const nX=XS.length,nY=YS.length;
   const op=new Float32Array(nX*nY*3),on=new Float32Array(nX*nY*3),oi=[];
-  const oh=(x,y)=>H.demAt(x,y)-.15;
+  const oh=(x,y)=>H.demAt(x,y)-.15;/* v1.20 all courses: far vertices sit on a coarse, widening grid; low-pass the DEM over the vertex spacing so single far-DEM cells don't pop up as blocks/steps */const ohS=(x,y,e)=>{if(e<20)return oh(x,y);const h=e*.5;return(oh(x,y)*2+oh(x+h,y)+oh(x-h,y)+oh(x,y+h)+oh(x,y-h)+oh(x+h,y+h)+oh(x-h,y-h))/8};
   for(let j=0;j<nY;j++)for(let i=0;i<nX;i++){const x=XS[i],y=YS[j],k=(j*nX+i)*3;op[k]=x;op[k+1]=y;
-    const inside=x>H.X0&&x<H.X1&&y>H.Y0&&y<H.Y1;op[k+2]=inside?H.hAt(x,y)*edge(x,y)+(1-edge(x,y))*oh(x,y):oh(x,y);
+    const inside=x>H.X0&&x<H.X1&&y>H.Y0&&y<H.Y1;const es=Math.max(XS[Math.min(i+1,nX-1)]-XS[Math.max(i-1,0)],YS[Math.min(j+1,nY-1)]-YS[Math.max(j-1,0)])*.5;op[k+2]=inside?H.hAt(x,y)*edge(x,y)+(1-edge(x,y))*oh(x,y):ohS(x,y,es);
     const e=Math.max(4,(XS[Math.min(i+1,nX-1)]-XS[Math.max(i-1,0)])*.5),gx=(oh(x+e,y)-oh(x-e,y))/(2*e),gy=(oh(x,y+e)-oh(x,y-e))/(2*e),l=Math.hypot(gx,gy,1);on[k]=-gx/l;on[k+1]=-gy/l;on[k+2]=1/l}
   for(let j=0;j<nY-1;j++)for(let i=0;i<nX-1;i++){if(XS[i]>=H.X0&&XS[i+1]<=H.X1&&YS[j]>=H.Y0&&YS[j+1]<=H.Y1)continue;const k=j*nX+i;oi.push(k,k+1,k+nX,k+1,k+nX+1,k+nX)}
   const outer=R.vao([{loc:0,n:3,d:op},{loc:1,n:3,d:on}],new Uint32Array(oi));
