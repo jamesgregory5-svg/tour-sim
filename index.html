@@ -193,7 +193,7 @@ td.l,th.l{text-align:left}
 <div id="fps"></div><div id="gimme"><div class="gb"><b>GIMME</b><span id="gimmeS"></span></div></div>
 <script>
 'use strict';
-const VERSION='v1.23';
+const VERSION='v1.24';
 const TAU=Math.PI*2,DEG=Math.PI/180;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,smooth=t=>t*t*(3-2*t);
 const pad=n=>String(n).padStart(2,'0');
@@ -572,7 +572,7 @@ const STYLE={
 STYLE.dunes=STYLE.sandhills;STYLE.prairie=Object.assign({},STYLE.links,{trees:.35,tree:0});
 const DENS={augusta:1.3,pinevalley:1.05,lookaway:1.05,cypress:.7,shinnecock:.03,oakmont:.05,merion:.8,ngla:.05,sandhills:.03,pebble:.35,fishers:.04,chicago:.3,seminole:.45,wingedfoot:1,friars:.05,crystal:.9,lacc:.6,tcc:1,riviera:.8,muirfieldv:1,oaklandhills:.8,oakhill:1.1,peachtree:1,pacificdunes:.02,shadowcreek:1.2,prairie:.25};
 // per-course turf colours: Riviera's kikuyu fairways read lighter against darker rough so the split fairway and small greens show
-const STYLE_OVR={lookaway:{deep:'#7f7c4a',native:20,sand:'#efe8d6'},riviera:{rough:'#44692a',rough2:'#4b712f',fw:'#5d963a',fw2:'#6ba445'}};
+const STYLE_OVR={lookaway:{deep:'#7f7c4a',native:20,sand:'#efe8d6'},oakmont:{rough:'#46692a',rough2:'#4e722e',fw:'#5a9036',fw2:'#669e3f',deep:'#8d8a56',native:24,sand:'#e8dcc0'},ngla:{deep:'#a59a5e',native:16,fw:'#66903c',fw2:'#729c45'},riviera:{rough:'#44692a',rough2:'#4b712f',fw:'#5d963a',fw2:'#6ba445'}};
 const TREEMIX={augusta:1,pinevalley:1,sandhills:1,lookaway:0,oakmont:0,crystal:2,riviera:0,shadowcreek:1,peachtree:1,seminole:3};
 const SCOL=['#000','rough','fw','fw','fringe','green','sand','water','deep','waste'];
 function fbm2(x,y,seed){let v=0,a=1,f=1/90;for(let o=0;o<4;o++){v+=a*vnoise(x*f+seed*7.1,y*f-seed*3.3);a*=.5;f*=2.03}return v}
@@ -842,7 +842,7 @@ function paintHole(H,PX){
   g.fillStyle=st.fw;noHoles(g,()=>{for(const P of(F.fw||[])){path(P);g.fill()}})// mowing stripes are shaded in the terrain shader (smooth, hole-aligned, no paint-map blocks)
   // first cut fringe around fairways
   g.lineJoin='round';g.strokeStyle='rgba(62,100,40,.75)';g.lineWidth=2.4;for(const P of(F.fw||[])){path(P);g.stroke()}
-  if((F.cp||[]).length){g.save();g.lineCap='round';g.lineJoin='round';const chk=P=>{let Q=P;for(let it=0;it<4;it++){if(Q.length<3)break;const N=[Q[0]];for(let k=0;k<Q.length-1;k++){const a=Q[k],b=Q[k+1];N.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75])}N.push(Q[Q.length-1]);Q=N}return Q};const CP=F.cp.map(chk);const op=P=>{g.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?g.lineTo(x,y):g.moveTo(x,y)})};g.strokeStyle='#55603f';g.lineWidth=2.2;g.globalAlpha=.18;for(const P of CP){op(P);g.stroke()}g.strokeStyle='#6f6c63';g.lineWidth=1.75;g.globalAlpha=.32;for(const P of CP){op(P);g.stroke()}g.strokeStyle='#77746b';g.lineWidth=1.35;g.globalAlpha=.72;for(const P of CP){op(P);g.stroke()}g.restore()}// v1.15: OSM cart paths: Chaikin-smoothed curves (4 passes), 1.35 yd core with a feathered edge, less contrast
+  if((F.cp||[]).length){g.save();g.lineCap='round';g.lineJoin='round';const chk=P=>{let Q=P;for(let it=0;it<4;it++){if(Q.length<3)break;const N=[Q[0]];for(let k=0;k<Q.length-1;k++){const a=Q[k],b=Q[k+1];N.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75])}N.push(Q[Q.length-1]);Q=N}return Q};const CP=F.cp.map(chk);const op=P=>{g.beginPath();P.forEach((p,i)=>{const x=p[0]-X0,y=Y1-p[1];i?g.lineTo(x,y):g.moveTo(x,y)})};g.strokeStyle='#55603f';g.lineWidth=3.0;g.globalAlpha=.2;for(const P of CP){op(P);g.stroke()}g.strokeStyle='#76736a';g.lineWidth=2.45;g.globalAlpha=.45;for(const P of CP){op(P);g.stroke()}g.strokeStyle='#8c897f';g.lineWidth=2.0;g.globalAlpha=.88;/* v1.24 A-grade: cart paths 2 yd (real ~8 ft) and lighter so they read from the tee (Merion 'faint paths') */for(const P of CP){op(P);g.stroke()}g.restore()}// v1.15: OSM cart paths: Chaikin-smoothed curves (4 passes), 1.35 yd core with a feathered edge, less contrast
   if((H.crk||[]).length){g.save();g.lineCap='round';g.lineJoin='round';// v1.15: added creeks under Lookaway's dry bridges: muddy banks, dark water, a few reed tufts (tapered ends)
     for(const c of H.crk){const P=c.P,n=P.length;const tp=k=>Math.min(1,Math.min(k,n-1-k)/7);
       for(const [col,wd,al] of[['#4b4a2c',4.6,.22],['#3c4128',3.2,.42],['#26312a',2.25,.85],['#2a4446',1.6,.95]]){g.strokeStyle=col;g.globalAlpha=al;for(let k=0;k<n-1;k++){const f=.35+.65*tp(k+.5);g.lineWidth=wd*c.w*f;g.beginPath();g.moveTo(P[k][0]-X0,Y1-P[k][1]);g.lineTo(P[k+1][0]-X0,Y1-P[k+1][1]);g.stroke()}}
@@ -1176,7 +1176,7 @@ function glSetHole(R,H,PX){
   const outer=R.vao([{loc:0,n:3,d:op},{loc:1,n:3,d:on}],new Uint32Array(oi));
   // trees + border treeline
   const all=H.trees.slice();const TR=RNG('b'+H.course.id+H.hi);const mix=treeMix(H.course.id).filter(m=>m[0]!==6&&m[0]!==5);const dens=H.st.trees;const canyon=H.course.id==='shadowcreek';// Shadow Creek: a dense pine canyon
-  const INF={lookaway:.5,shadowcreek:1,seminole:.75,muirfieldv:.7,oaklandhills:.7,wingedfoot:.55,augusta:.55,pebble:.4,oakmont:.25,oakhill:.6,merion:.45,chicago:.4,peachtree:.6,pinevalley:.7,riviera:.5,lacc:.45,tcc:.5,crystal:.4,cypress:.45}[H.course.id]||0;const boost=INF>=.55&&!canyon;
+  const INF={lookaway:.5,shadowcreek:1,seminole:.75,muirfieldv:.7,oaklandhills:.7,wingedfoot:.38,augusta:.55,pebble:.4,oakmont:0,oakhill:.6,merion:.45,chicago:.4,peachtree:.6,pinevalley:.7,riviera:.5,lacc:.45,tcc:.5,crystal:.4,cypress:.45}[H.course.id]||0;const boost=INF>=.55&&!canyon;
   const ring=(x,y)=>{const s=H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1));if(s===S_WATER)return;if(H.sea.length&&H.surfAt(clamp(x,H.X0+1,H.X1-1),clamp(y,H.Y0+1,H.Y1-1))===S_WATER)return;
     // fewer trees behind the green (no uniform wall framing the flag), with gaps and stronger height variety
     const beyond=y>H.Y1-5;if(beyond&&TR()<.55)return;if(TR()<.12)return;
@@ -1197,7 +1197,7 @@ const PM=['lacc','riviera'].includes(cid)?[.8,0,0,1]:['seminole','tpc','sawgrass
   R.hole={H,tCol,tMask,ter,outer,mini:P.cv,far:[0,1,2].map(i=>f1[i]*.55+f2[i]*.45)};
   return P.cv}
 function infillTrees(H){if(H._infill)return;H._infill=1;const canyon=H.course.id==='shadowcreek';const TR=RNG('inf'+H.course.id+H.hi);const mix=treeMix(H.course.id).filter(m=>m[0]!==6&&m[0]!==5);
-  const INF={lookaway:.5,shadowcreek:1,seminole:.75,muirfieldv:.7,oaklandhills:.7,wingedfoot:.55,augusta:.55,pebble:.4,oakmont:.25,oakhill:.6,merion:.45,chicago:.4,peachtree:.6,pinevalley:.7,riviera:.5,lacc:.45,tcc:.5,crystal:.4,cypress:.45}[H.course.id]||0;
+  const INF={lookaway:.5,shadowcreek:1,seminole:.75,muirfieldv:.7,oaklandhills:.7,wingedfoot:.38,augusta:.55,pebble:.4,oakmont:0,oakhill:.6,merion:.45,chicago:.4,peachtree:.6,pinevalley:.7,riviera:.5,lacc:.45,tcc:.5,crystal:.4,cypress:.45}[H.course.id]||0;
   if(INF>0){// infill the rough inside the hole box: tight pine stands that hug the corridor (kept clear of fairway, green, tees and the line of play)
     const lineD=(x,y)=>{const L=H.line||[];let m=1e9;for(let i=0;i+1<L.length;i++){const ax=L[i][0],ay=L[i][1],bx=L[i+1][0]-ax,by=L[i+1][1]-ay,l2=bx*bx+by*by||1;const t=clamp(((x-ax)*bx+(y-ay)*by)/l2,0,1);m=Math.min(m,Math.hypot(x-ax-bx*t,y-ay-by*t))}return m};// keep the line of play open
     const near=(x,y,rr)=>{for(let a=0;a<8;a++){const s=H.surfAt(x+Math.cos(a*.785)*rr,y+Math.sin(a*.785)*rr);if(s===S_FW||s===S_GREEN||s===S_FRINGE||s===S_TEE||s===S_SAND||s===S_WATER)return true}const s=H.surfAt(x,y);return s!==S_ROUGH&&s!==S_DEEP&&s!==S_OB};
